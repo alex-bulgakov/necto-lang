@@ -2,29 +2,43 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"necto/pkg/ast"
 	"necto/pkg/codegen"
 	"necto/pkg/eval"
+	"necto/pkg/format"
 	"necto/pkg/lexer"
 	"necto/pkg/parser"
 	"necto/pkg/types"
 )
 
-const VERSION = "0.5.0-alpha"
+const VERSION = "0.6.0-alpha"
+
+type ProjectConfig struct {
+	Name         string            `json:"name"`
+	Version      string            `json:"version"`
+	Entry        string            `json:"entry"`
+	Description  string            `json:"description,omitempty"`
+	Authors      []string          `json:"authors,omitempty"`
+	Dependencies map[string]string `json:"dependencies,omitempty"`
+}
 
 func printUsage() {
 	fmt.Println("Necto Programming Language Compiler & Runtime")
 	fmt.Printf("Version: %s\n\n", VERSION)
 	fmt.Println("Usage:")
-	fmt.Println("  necto run <file.nc>            Run a Necto source file directly")
-	fmt.Println("  necto test <file.nc>           Run all unit tests in a Necto source file")
-	fmt.Println("  necto build <file.nc> -o <out> Compile Necto program to native binary")
-	fmt.Println("  necto check <file.nc>          Type check program without executing")
+	fmt.Println("  necto init [name]              Initialize a new Necto project with necto.json")
+	fmt.Println("  necto fmt [file/dir] [--check] Format Necto source code to canonical style")
+	fmt.Println("  necto run [file.nc]            Run Necto program (or project entry from necto.json)")
+	fmt.Println("  necto test [file.nc]           Run unit tests in file or tests/ directory")
+	fmt.Println("  necto build [file.nc] -o <out> Compile Necto program to native binary")
+	fmt.Println("  necto check [file.nc]          Type check program without executing")
 	fmt.Println("  necto repl                     Start interactive Necto REPL")
 	fmt.Println("  necto version                  Show Necto version")
 }
@@ -38,28 +52,85 @@ func main() {
 	command := os.Args[1]
 
 	switch command {
+	case "init":
+		name := "my_project"
+		if len(os.Args) >= 3 {
+			name = os.Args[2]
+		}
+		initProject(name)
+
+	case "fmt":
+		checkOnly := false
+		target := "."
+		for i := 2; i < len(os.Args); i++ {
+			if os.Args[i] == "--check" {
+				checkOnly = true
+			} else if !strings.HasPrefix(os.Args[i], "-") {
+				target = os.Args[i]
+			}
+		}
+		runFormatter(target, checkOnly)
+
 	case "run":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Error: missing source file to run. Example: necto run main.nc")
+		sourceFile := ""
+		if len(os.Args) >= 3 {
+			sourceFile = os.Args[2]
+		} else {
+			cfg, _ := findProjectConfig()
+			if cfg != nil && cfg.Entry != "" {
+				sourceFile = cfg.Entry
+			}
+		}
+		if sourceFile == "" {
+			fmt.Fprintln(os.Stderr, "Error: missing source file to run. Run 'necto run <file.nc>' or create a necto.json project.")
 			os.Exit(1)
 		}
-		runFile(os.Args[2])
+		runFile(sourceFile)
 
 	case "test":
-		if len(os.Args) < 3 {
-			fmt.Fprintln(os.Stderr, "Error: missing source file to test. Example: necto test main.nc")
-			os.Exit(1)
+		if len(os.Args) >= 3 {
+			testFile(os.Args[2])
+		} else {
+			// Автоматический поиск тестов в tests/ или necto.json
+			ranAny := false
+			if info, err := os.Stat("tests"); err == nil && info.IsDir() {
+				filepath.Walk("tests", func(path string, fi os.FileInfo, err error) error {
+					if err == nil && !fi.IsDir() && strings.HasSuffix(path, ".nc") {
+						testFile(path)
+						ranAny = true
+					}
+					return nil
+				})
+			}
+			if !ranAny {
+				cfg, _ := findProjectConfig()
+				if cfg != nil && cfg.Entry != "" {
+					testFile(cfg.Entry)
+					ranAny = true
+				}
+			}
+			if !ranAny {
+				fmt.Fprintln(os.Stderr, "Error: missing source file to test. Example: necto test main.nc")
+				os.Exit(1)
+			}
 		}
-		testFile(os.Args[2])
 
 	case "build":
-		if len(os.Args) < 3 {
+		sourceFile := ""
+		if len(os.Args) >= 3 && !strings.HasPrefix(os.Args[2], "-") {
+			sourceFile = os.Args[2]
+		} else {
+			cfg, _ := findProjectConfig()
+			if cfg != nil && cfg.Entry != "" {
+				sourceFile = cfg.Entry
+			}
+		}
+		if sourceFile == "" {
 			fmt.Fprintln(os.Stderr, "Error: missing source file to build. Example: necto build main.nc -o app.exe")
 			os.Exit(1)
 		}
-		sourceFile := os.Args[2]
 		outFile := "output.exe"
-		for i := 3; i < len(os.Args); i++ {
+		for i := 2; i < len(os.Args); i++ {
 			if os.Args[i] == "-o" && i+1 < len(os.Args) {
 				outFile = os.Args[i+1]
 				break
@@ -68,11 +139,20 @@ func main() {
 		buildFile(sourceFile, outFile)
 
 	case "check":
-		if len(os.Args) < 3 {
+		sourceFile := ""
+		if len(os.Args) >= 3 {
+			sourceFile = os.Args[2]
+		} else {
+			cfg, _ := findProjectConfig()
+			if cfg != nil && cfg.Entry != "" {
+				sourceFile = cfg.Entry
+			}
+		}
+		if sourceFile == "" {
 			fmt.Fprintln(os.Stderr, "Error: missing source file to check.")
 			os.Exit(1)
 		}
-		checkFile(os.Args[2])
+		checkFile(sourceFile)
 
 	case "repl":
 		startRepl()
@@ -276,6 +356,141 @@ func startRepl() {
 		result := eval.Eval(prog, env)
 		if result != nil && result.Type() != eval.NULL_OBJ {
 			fmt.Println(result.Inspect())
+		}
+	}
+}
+
+func findProjectConfig() (*ProjectConfig, string) {
+	candidates := []string{"necto.json", "../necto.json"}
+	for _, c := range candidates {
+		if data, err := os.ReadFile(c); err == nil {
+			var cfg ProjectConfig
+			if err := json.Unmarshal(data, &cfg); err == nil {
+				return &cfg, c
+			}
+		}
+	}
+	return nil, ""
+}
+
+func initProject(name string) {
+	dir := name
+	if dir == "" || dir == "." {
+		dir = "."
+		name = filepath.Base(filepath.Clean("."))
+	} else {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating directory '%s': %s\n", dir, err)
+			os.Exit(1)
+		}
+	}
+
+	cfgPath := filepath.Join(dir, "necto.json")
+	if _, err := os.Stat(cfgPath); err == nil {
+		fmt.Fprintf(os.Stderr, "Error: project already exists in '%s' (necto.json found)\n", dir)
+		os.Exit(1)
+	}
+
+	cfg := ProjectConfig{
+		Name:        name,
+		Version:     "0.1.0",
+		Entry:       "src/main.nc",
+		Description: fmt.Sprintf("A Necto project for %s", name),
+		Authors:     []string{},
+	}
+	cfgData, _ := json.MarshalIndent(cfg, "", "  ")
+	os.WriteFile(cfgPath, cfgData, 0644)
+
+	srcDir := filepath.Join(dir, "src")
+	os.MkdirAll(srcDir, 0755)
+	mainCode := `// src/main.nc
+fn main() {
+    println("Hello from Necto!");
+}
+`
+	os.WriteFile(filepath.Join(srcDir, "main.nc"), []byte(mainCode), 0644)
+
+	testsDir := filepath.Join(dir, "tests")
+	os.MkdirAll(testsDir, 0755)
+	testCode := `// tests/main_test.nc
+test "sanity check" {
+    assert(1 + 1 == 2);
+}
+`
+	os.WriteFile(filepath.Join(testsDir, "main_test.nc"), []byte(testCode), 0644)
+
+	gitignore := "bin/\n*.exe\n*.tmp.c\n"
+	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(gitignore), 0644)
+
+	fmt.Printf("✓ Initialized new Necto project '%s' in '%s'\n", name, dir)
+	fmt.Println("\nTo run the project:")
+	if dir != "." {
+		fmt.Printf("  cd %s\n", dir)
+	}
+	fmt.Println("  necto run")
+}
+
+func runFormatter(target string, checkOnly bool) {
+	if target == "" {
+		target = "."
+	}
+
+	info, err := os.Stat(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	hasUnformatted := false
+	formattedCount := 0
+
+	formatOneFile := func(path string) {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading %s: %s\n", path, err)
+			return
+		}
+		formatted, err := format.Format(string(content))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Format error in %s: %s\n", path, err)
+			return
+		}
+		if string(content) != formatted {
+			hasUnformatted = true
+			if checkOnly {
+				fmt.Printf("✗ %s is not formatted\n", path)
+			} else {
+				if err := os.WriteFile(path, []byte(formatted), 0644); err == nil {
+					fmt.Printf("✓ Formatted %s\n", path)
+					formattedCount++
+				}
+			}
+		}
+	}
+
+	if !info.IsDir() {
+		formatOneFile(target)
+	} else {
+		filepath.Walk(target, func(path string, fi os.FileInfo, err error) error {
+			if err == nil && !fi.IsDir() && (strings.HasSuffix(path, ".nc") || strings.HasSuffix(path, ".necto")) {
+				if !strings.Contains(path, ".git") && !strings.Contains(path, "bin") {
+					formatOneFile(path)
+				}
+			}
+			return nil
+		})
+	}
+
+	if checkOnly {
+		if hasUnformatted {
+			fmt.Println("\nSome files require formatting. Run 'necto fmt' to fix.")
+			os.Exit(1)
+		} else {
+			fmt.Println("✓ All files are properly formatted!")
+		}
+	} else {
+		if formattedCount == 0 {
+			fmt.Println("✓ All files are already formatted!")
 		}
 	}
 }

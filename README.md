@@ -19,6 +19,7 @@
 
 - **Официальная документация:**
   - Полная спецификация языка: [**`SPECIFICATION.md`**](SPECIFICATION.md)
+  - Официальное расширение для VS Code: [**`editors/vscode/`**](editors/vscode/)
 
 ---
 
@@ -31,28 +32,41 @@ go build -o bin/necto.exe ./cmd/necto
 
 ### Команды CLI Necto
 
-1. **Запуск сквозного пайплайна компилятора на чистом Necto:**
+1. **Инициализация нового проекта (`necto init`):**
 ```powershell
-.\bin\necto.exe run examples/10_self_compiler_pipeline.nc
+.\bin\necto.exe init my_app
+cd my_app
+.\..\bin\necto.exe run
 ```
 
-2. **Запуск встроенных юнит-тестов (`necto test`):**
+2. **Автоматическое форматирование кода (`necto fmt`):**
 ```powershell
-.\bin\necto.exe test examples/10_self_compiler_pipeline.nc
+.\bin\necto.exe fmt .
+.\bin\necto.exe fmt --check
 ```
 
-3. **Компиляция Necto-файла в нативный исполняемый файл `.exe` через Clang/LLVM:**
+3. **Запуск сквозного пайплайна компилятора на чистом Necto:**
+```powershell
+.\bin\necto.exe run compiler/main.nc
+```
+
+4. **Запуск встроенных юнит-тестов (`necto test`):**
+```powershell
+.\bin\necto.exe test compiler/main.nc
+```
+
+5. **Компиляция Necto-файла в нативный исполняемый файл `.exe` через Clang/LLVM:**
 ```powershell
 .\bin\necto.exe build examples/02_fibonacci.nc -o fib.exe
 .\fib.exe
 ```
 
-4. **Статическая проверка типов (Type Check):**
+6. **Статическая проверка типов (Type Check):**
 ```powershell
-.\bin\necto.exe check examples/10_self_compiler_pipeline.nc
+.\bin\necto.exe check compiler/main.nc
 ```
 
-5. **Интерактивная консоль (REPL):**
+7. **Интерактивная консоль (REPL):**
 ```powershell
 .\bin\necto.exe repl
 ```

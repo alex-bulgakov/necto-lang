@@ -19,4 +19,3 @@ fn main() {
         println("Score is within normal limits.")
     }
 }
-

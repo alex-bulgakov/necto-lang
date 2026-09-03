@@ -1,0 +1,60 @@
+{
+  "Function Declaration": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}) -> ${3:void} {",
+      "    ${0}",
+      "}"
+    ],
+    "description": "Define a Necto function"
+  },
+  "Struct Declaration": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name} {",
+      "    ${2:field}: ${3:type},",
+      "}"
+    ],
+    "description": "Define a Necto struct"
+  },
+  "Impl Block": {
+    "prefix": "impl",
+    "body": [
+      "impl ${1:StructName} {",
+      "    fn new(${2:args}) -> ${1:StructName} {",
+      "        return ${1:StructName} { ${3} };",
+      "    }",
+      "}"
+    ],
+    "description": "Define an impl method block"
+  },
+  "Tagged Enum": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:Name} {",
+      "    ${2:Variant}(${3:type}),",
+      "}"
+    ],
+    "description": "Define an algebraic Tagged Enum"
+  },
+  "Unit Test": {
+    "prefix": "test",
+    "body": [
+      "test \"${1:test name}\" {",
+      "    assert(${2:condition});",
+      "}"
+    ],
+    "description": "Define a Necto unit test block"
+  },
+  "Match Statement": {
+    "prefix": "match",
+    "body": [
+      "match ${1:expr} {",
+      "    ${2:Pattern} => {",
+      "        ${0}",
+      "    },",
+      "}"
+    ],
+    "description": "Pattern matching match expression"
+  }
+}

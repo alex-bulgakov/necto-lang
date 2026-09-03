@@ -1,0 +1,47 @@
+{
+  "name": "necto-language",
+  "displayName": "Necto Programming Language",
+  "description": "Rich language support and syntax highlighting for Necto (.nc)",
+  "version": "0.6.0",
+  "publisher": "alex-bulgakov",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "necto",
+    "systems programming",
+    "compiler"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "necto",
+        "aliases": [
+          "Necto",
+          "necto"
+        ],
+        "extensions": [
+          ".nc",
+          ".necto"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "necto",
+        "scopeName": "source.necto",
+        "path": "./syntaxes/necto.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "necto",
+        "path": "./snippets/snippets.json"
+      }
+    ]
+  }
+}

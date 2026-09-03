@@ -1,7 +1,7 @@
-# Официальная спецификация языка программирования Necto (v0.5.0)
+# Официальная спецификация языка программирования Necto (v0.6.0)
 
 > **Статус документа:** Официальная спецификация и эталонное руководство  
-> **Версия языка:** `v0.5.0-alpha`  
+> **Версия языка:** `v0.6.0-alpha`  
 > **Последнее обновление:** 2026-09-03  
 
 ---
@@ -311,10 +311,12 @@ test "arithmetic verification" {
 ```
 
 ### Команды командной строки (CLI)
-* `necto run <file.nc>` — непосредственный запуск программы через интерпретатор.
-* `necto build <file.nc> -o <out.exe>` — AOT-компиляция программы в нативный машинный код `.exe` через Clang 17 / LLVM.
-* `necto test <file.nc>` — запуск всех встроенных блоков `test` с замером времени и выводом отчета.
-* `necto check <file.nc>` — статический синтаксический и семантический анализ типов без выполнения.
+* `necto init [name]` — инициализация нового проекта Necto с файлом `necto.json`, точкой входа `src/main.nc` и тестами `tests/main_test.nc`.
+* `necto fmt [file/dir] [--check]` — форматирование исходного кода Necto в канонический стиль.
+* `necto run [file.nc]` — непосредственный запуск программы (или точки входа из `necto.json`).
+* `necto build [file.nc] -o <out.exe>` — AOT-компиляция программы в нативный машинный код `.exe` через Clang 17 / LLVM.
+* `necto test [file.nc]` — запуск встроенных блоков `test` в файле или в каталоге `tests/`.
+* `necto check [file.nc]` — статический синтаксический и семантический анализ типов без выполнения.
 * `necto repl` — интерактивная оболочка REPL.
 * `necto version` — версия тулчейна.
 
@@ -331,6 +333,25 @@ test "arithmetic verification" {
 ```powershell
 necto run compiler/main.nc
 ```
+
+### 6.3. Манифест проекта `necto.json`
+Файл `necto.json` определяет конфигурацию проекта:
+```json
+{
+  "name": "my_application",
+  "version": "0.1.0",
+  "entry": "src/main.nc",
+  "description": "My first Necto project",
+  "authors": ["Developer <dev@example.com>"],
+  "dependencies": {}
+}
+```
+
+### 6.4. Поддержка редакторов кода (VS Code / Cursor)
+В репозитории доступно официальное расширение в каталоге `editors/vscode/`:
+* Полноценная TextMate подсветка синтаксиса (`syntaxes/necto.tmLanguage.json`).
+* Автодополнение парных скобок, кавычек и комментариев (`language-configuration.json`).
+* Сниппеты для `fn`, `struct`, `impl`, `enum`, `match`, `test` (`snippets/snippets.json`).
 
 ---
 

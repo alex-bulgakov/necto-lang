@@ -148,6 +148,14 @@ impl Codegen {
                 out += "}\n\n"
                 return out
             },
+            Stmt.StructDecl(name, fields) => {
+                let mut out = "typedef struct {\n"
+                for i in 0..fields.len() {
+                    out += "    long long " + fields[i] + ";\n"
+                }
+                out += "} " + name + ";\n\n"
+                return out
+            },
             Stmt.Assert(cond) => {
                 let c = self.emit_expr(cond)
                 return f"    if (!({c})) {{ fprintf(stderr, \"AssertionError failed\\n\"); return 1; }}\n"
