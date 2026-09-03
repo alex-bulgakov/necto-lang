@@ -1,7 +1,8 @@
-# Necto Programming Language (v1.1.0)
+# Necto Programming Language (v1.2.0)
 
 **Necto** (от лат. *nectere / necto* — *«связывать воедино», «сплетать»*) — современный универсальный системный язык программирования со статической типизацией, сплетающий воедино лучшие инженерные практики:
 - **Синтез лучших концепций**:
+  - **Встроенный пакетный менеджер (`necto install`)**: декларация внешних зависимостей в `necto.json`, изоляция в `.necto/deps/` и автоматическая установка из Git.
   - **Легковесная конкурентность (`spawn` и `Channel[T]`)**: запуск фоновых задач через `spawn(fn, args...)` и безопасная передача сообщений через каналы `Channel.new(cap)` с методами `.send()`, `.recv()`, `.close()`.
   - **Встроенный бенчмаркер производительности (`necto bench`)**: блоки `bench "name" { ... }` с замером времени на итерацию (`ns/op`) и пропускной способности (`ops/s`).
   - **Автоматический генератор документации (`necto doc`)**: интерактивный современный HTML-сайт с поиском по doc-комментариям `///`.
@@ -23,6 +24,7 @@
   - Команда `necto bootstrap` автономно собирает нативный бинарник `bin/necto-native.exe`, компилирующий любые программы Necto без зависимости от Go!
 - **Проектная система и инструменты**:
   - `necto init [name]` — создание нового проекта с манифестом `necto.json`.
+  - `necto install` — загрузка и обновление зависимостей из Git.
   - `necto fmt` — автоматический форматировщик кода.
   - Официальное расширение для VS Code в каталоге [**`editors/vscode/`**](editors/vscode/).
 
@@ -81,25 +83,35 @@ cd my_app
 .\bin\necto.exe bench examples/13_benchmarks_and_docs.nc
 ```
 
-8. **Генерация интерактивной документации (`necto doc`):**
+8. **Управление зависимостями (`necto install`):**
+```powershell
+.\bin\necto.exe install
+```
+
+9. **Запуск демонстрации конкурентности (`spawn` и `Channel`):**
+```powershell
+.\bin\necto.exe run examples/15_concurrency.nc
+```
+
+10. **Генерация интерактивной документации (`necto doc`):**
 ```powershell
 .\bin\necto.exe doc . --output docs
 # Для запуска локального веб-сервера документации:
 .\bin\necto.exe doc . --serve
 ```
 
-9. **Компиляция Necto-файла в нативный исполняемый файл `.exe` через Clang/LLVM:**
+11. **Компиляция Necto-файла в нативный исполняемый файл `.exe` через Clang/LLVM:**
 ```powershell
 .\bin\necto.exe build examples/02_fibonacci.nc -o fib.exe
 .\fib.exe
 ```
 
-10. **Статическая проверка типов (Type Check):**
+12. **Статическая проверка типов (Type Check):**
 ```powershell
 .\bin\necto.exe check compiler/main.nc
 ```
 
-11. **Интерактивная консоль (REPL):**
+13. **Интерактивная консоль (REPL):**
 ```powershell
 .\bin\necto.exe repl
 ```

@@ -21,7 +21,7 @@ import (
 	"necto/pkg/types"
 )
 
-const VERSION = "1.1.0"
+const VERSION = "1.2.0"
 
 type ProjectConfig struct {
 	Name         string            `json:"name"`
@@ -42,6 +42,7 @@ func printUsage() {
 	fmt.Println("  necto test [file.nc]           Run unit tests in file or tests/ directory")
 	fmt.Println("  necto bench [file.nc] [--runs] Run benchmarks in file or tests/ directory")
 	fmt.Println("  necto doc [file/dir] [--serve] Generate interactive HTML documentation")
+	fmt.Println("  necto install                  Install dependencies from necto.json")
 	fmt.Println("  necto build [file.nc] -o <out> Compile Necto program to native binary")
 	fmt.Println("  necto bootstrap                Compile self-hosted compiler to bin/necto-native.exe (Stage 2)")
 	fmt.Println("  necto check [file.nc]          Type check program without executing")
@@ -203,6 +204,9 @@ func main() {
 			os.Exit(1)
 		}
 		checkFile(sourceFile)
+
+	case "install":
+		installDeps()
 
 	case "repl":
 		startRepl()
@@ -1023,4 +1027,89 @@ func renderDocsHTML(projectName, version string, items []DocItem) string {
     </script>
 </body>
 </html>`
+}
+
+func installDeps() {
+	cfg, _ := findProjectConfig()
+	if cfg == nil {
+		fmt.Fprintln(os.Stderr, "Error: could not find necto.json in current directory.")
+		fmt.Fprintln(os.Stderr, "Run 'necto init <name>' to create a project first.")
+		os.Exit(1)
+	}
+
+	if len(cfg.Dependencies) == 0 {
+		fmt.Println("No dependencies defined in necto.json.")
+		fmt.Println("Add dependencies to your necto.json:")
+		fmt.Println(`  "dependencies": {`)
+		fmt.Println(`    "my-lib": "https://github.com/user/my-lib.git@main"`)
+		fmt.Println(`  }`)
+		return
+	}
+
+	depsDir := ".necto" + string(os.PathSeparator) + "deps"
+	if err := os.MkdirAll(depsDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: could not create dependencies directory '%s': %v\n", depsDir, err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Installing %d dependency(ies)...\n\n", len(cfg.Dependencies))
+
+	installed := 0
+	failed := 0
+
+	for name, source := range cfg.Dependencies {
+		// Parse source: "https://github.com/user/repo.git@branch" or "https://github.com/user/repo.git"
+		repoURL := source
+		branch := "main"
+		if idx := strings.LastIndex(source, "@"); idx > 0 {
+			repoURL = source[:idx]
+			branch = source[idx+1:]
+		}
+
+		depPath := filepath.Join(depsDir, name)
+
+		if info, err := os.Stat(depPath); err == nil && info.IsDir() {
+			// Dependency already exists — pull latest
+			fmt.Printf("  ↻ Updating '%s' (branch: %s)...\n", name, branch)
+			cmd := exec.Command("git", "-C", depPath, "pull", "--ff-only")
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				fmt.Fprintf(os.Stderr, "    ✗ Failed to update '%s': %v\n", name, err)
+				failed++
+				continue
+			}
+			fmt.Printf("    ✓ Updated '%s'\n", name)
+		} else {
+			// Clone fresh
+			fmt.Printf("  ↓ Cloning '%s' from %s (branch: %s)...\n", name, repoURL, branch)
+			cmd := exec.Command("git", "clone", "--depth", "1", "--branch", branch, repoURL, depPath)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				fmt.Fprintf(os.Stderr, "    ✗ Failed to clone '%s': %v\n", name, err)
+				failed++
+				continue
+			}
+			fmt.Printf("    ✓ Installed '%s'\n", name)
+		}
+		installed++
+	}
+
+	fmt.Printf("\nDone: %d installed, %d failed.\n", installed, failed)
+	if installed > 0 {
+		fmt.Printf("Dependencies are available in: %s/\n", depsDir)
+
+		// Count .nc files in deps
+		ncCount := 0
+		filepath.Walk(depsDir, func(path string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() && strings.HasSuffix(path, ".nc") {
+				ncCount++
+			}
+			return nil
+		})
+		if ncCount > 0 {
+			fmt.Printf("Found %d Necto source file(s) in dependencies.\n", ncCount)
+		}
+	}
 }
