@@ -22,3 +22,7 @@ structs_native.exe
 Thumbs.db
 .idea/
 .vscode/
+
+# Sensitive tokens
+git_token.txt
+*token*.txt
