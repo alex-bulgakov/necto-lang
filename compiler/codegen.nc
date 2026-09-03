@@ -12,6 +12,57 @@ impl Codegen {
         return Codegen { indent_level: 0 }
     }
 
+    fn emit_formatted_string_printf(self, s: str, newline: bool) -> str {
+        let mut fmt_str = ""
+        let mut args_list: [str] = []
+        let mut i = 0
+        let n = s.len()
+        let mut has_interp = false
+
+        while i < n {
+            let ch = s.char_at(i)
+            if ch == 123 {
+                let mut j = i + 1
+                let mut var_name = ""
+                while j < n && s.char_at(j) != 125 {
+                    var_name = var_name + s.sub(j, j + 1)
+                    j += 1
+                }
+                if j < n && s.char_at(j) == 125 {
+                    has_interp = true
+                    fmt_str = fmt_str + "%lld"
+                    args_list.push(f"(long long)({var_name})")
+                    i = j + 1
+                } else {
+                    fmt_str = fmt_str + s.sub(i, i + 1)
+                    i += 1
+                }
+            } else {
+                fmt_str = fmt_str + s.sub(i, i + 1)
+                i += 1
+            }
+        }
+
+        if !has_interp {
+            if newline {
+                return f"printf(\"%s\\n\", \"{s}\")"
+            }
+            return f"printf(\"%s\", \"{s}\")"
+        }
+
+        let mut args_joined = ""
+        let mut k = 0
+        while k < args_list.len() {
+            args_joined = args_joined + ", " + args_list[k]
+            k += 1
+        }
+
+        if newline {
+            return f"printf(\"{fmt_str}\\n\"{args_joined})"
+        }
+        return f"printf(\"{fmt_str}\"{args_joined})"
+    }
+
     fn emit_expr(mut self, e: Expr) -> str {
         match e {
             Expr.Num(n) => {
@@ -40,12 +91,12 @@ impl Codegen {
                 if name == "println" {
                     if args.len() == 1 {
                         let arg = args[0]
-                        let arg_code = self.emit_expr(arg)
                         match arg {
                             Expr.StrVal(s) => {
-                                return f"printf(\"%s\\n\", {arg_code})"
+                                return self.emit_formatted_string_printf(s, true)
                             },
                             _ => {
+                                let arg_code = self.emit_expr(arg)
                                 return f"printf(\"%lld\\n\", (long long)({arg_code}))"
                             },
                         }
@@ -54,12 +105,12 @@ impl Codegen {
                 if name == "print" {
                     if args.len() == 1 {
                         let arg = args[0]
-                        let arg_code = self.emit_expr(arg)
                         match arg {
                             Expr.StrVal(s) => {
-                                return f"printf(\"%s\", {arg_code})"
+                                return self.emit_formatted_string_printf(s, false)
                             },
                             _ => {
+                                let arg_code = self.emit_expr(arg)
                                 return f"printf(\"%lld\", (long long)({arg_code}))"
                             },
                         }

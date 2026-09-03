@@ -21,7 +21,7 @@ import (
 	"necto/pkg/types"
 )
 
-const VERSION = "2.0.0"
+const VERSION = "2.0.1"
 
 type ProjectConfig struct {
 	Name         string            `json:"name"`
@@ -234,21 +234,69 @@ func main() {
 	}
 }
 
+func renderRichDiagnostic(filePath string, fileContent string, rawErr string) string {
+	var line, col int
+	var msg string
+	n, _ := fmt.Sscanf(rawErr, "[%d:%d]", &line, &col)
+	if n == 2 {
+		idx := strings.Index(rawErr, "]")
+		if idx != -1 {
+			msg = strings.TrimSpace(rawErr[idx+1:])
+		}
+	} else {
+		return "  • " + rawErr
+	}
+
+	lines := strings.Split(fileContent, "\n")
+	if line <= 0 || line > len(lines) {
+		return fmt.Sprintf("  • %s", rawErr)
+	}
+
+	sourceLine := strings.ReplaceAll(lines[line-1], "\r", "")
+	linePrefix := fmt.Sprintf("%4d | ", line)
+	if col > len(sourceLine)+1 {
+		col = len(sourceLine) + 1
+	}
+	var caretSb strings.Builder
+	for i := 0; i < len(linePrefix); i++ {
+		caretSb.WriteByte(' ')
+	}
+	for i := 1; i < col; i++ {
+		if i-1 < len(sourceLine) && sourceLine[i-1] == '\t' {
+			caretSb.WriteByte('\t')
+		} else {
+			caretSb.WriteByte(' ')
+		}
+	}
+	caretSb.WriteString("^")
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("error: %s\n", msg))
+	sb.WriteString(fmt.Sprintf("  --> %s:%d:%d\n", filePath, line, col))
+	sb.WriteString("     |\n")
+	sb.WriteString(fmt.Sprintf("%s%s\n", linePrefix, sourceLine))
+	sb.WriteString(fmt.Sprintf("%s", caretSb.String()))
+
+	return sb.String()
+}
+
 func parseAndCheck(filepath string) (*ast.Program, error) {
 	bytes, err := os.ReadFile(filepath)
 	if err != nil {
 		return nil, fmt.Errorf("could not read file '%s': %w", filepath, err)
 	}
+	content := string(bytes)
 
-	l := lexer.New(string(bytes))
+	l := lexer.New(content)
 	p := parser.New(l)
 	prog := p.ParseProgram()
 
 	if len(p.Errors()) > 0 {
 		var sb strings.Builder
-		sb.WriteString("Syntax Errors:\n")
+		sb.WriteString("Syntax Errors in " + filepath + ":\n\n")
 		for _, e := range p.Errors() {
-			sb.WriteString(fmt.Sprintf("  • %s\n", e))
+			sb.WriteString(renderRichDiagnostic(filepath, content, e))
+			sb.WriteString("\n\n")
 		}
 		return nil, fmt.Errorf("%s", sb.String())
 	}
@@ -258,9 +306,10 @@ func parseAndCheck(filepath string) (*ast.Program, error) {
 
 	if len(checker.Errors()) > 0 {
 		var sb strings.Builder
-		sb.WriteString("Type Errors:\n")
+		sb.WriteString("Type Errors in " + filepath + ":\n\n")
 		for _, e := range checker.Errors() {
-			sb.WriteString(fmt.Sprintf("  • %s\n", e))
+			sb.WriteString(renderRichDiagnostic(filepath, content, e))
+			sb.WriteString("\n\n")
 		}
 		return nil, fmt.Errorf("%s", sb.String())
 	}

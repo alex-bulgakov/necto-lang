@@ -1318,6 +1318,45 @@ func evalDotExpression(left Object, prop string, env ...*Environment) Object {
 					return nativeBoolToBooleanObject(strings.Contains(obj.Value, args[0].Inspect()))
 				},
 			}
+		case "starts_with":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("str.starts_with() takes 1 argument (prefix)")
+					}
+					return nativeBoolToBooleanObject(strings.HasPrefix(obj.Value, args[0].Inspect()))
+				},
+			}
+		case "ends_with":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("str.ends_with() takes 1 argument (suffix)")
+					}
+					return nativeBoolToBooleanObject(strings.HasSuffix(obj.Value, args[0].Inspect()))
+				},
+			}
+		case "trim":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					return &String{Value: strings.TrimSpace(obj.Value)}
+				},
+			}
+		case "split":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("str.split() takes 1 argument (delimiter)")
+					}
+					delim := args[0].Inspect()
+					parts := strings.Split(obj.Value, delim)
+					var elems []Object
+					for _, p := range parts {
+						elems = append(elems, &String{Value: p})
+					}
+					return &Array{Elements: elems}
+				},
+			}
 		}
 
 	case *MapInstance:

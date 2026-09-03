@@ -627,6 +627,14 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 				return &FunctionType{Params: []Type{Int}, ReturnType: Int}
 			case "contains":
 				return &FunctionType{Params: []Type{Str}, ReturnType: Bool}
+			case "starts_with":
+				return &FunctionType{Params: []Type{Str}, ReturnType: Bool}
+			case "ends_with":
+				return &FunctionType{Params: []Type{Str}, ReturnType: Bool}
+			case "trim":
+				return &FunctionType{Params: []Type{}, ReturnType: Str}
+			case "split":
+				return &FunctionType{Params: []Type{Str}, ReturnType: &ArrayType{Element: Str}}
 			}
 		}
 
