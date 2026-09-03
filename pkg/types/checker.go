@@ -410,7 +410,7 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 		return &OptionType{Inner: valT}
 
 	case *ast.Identifier:
-		if e.Value == "fs" || e.Value == "os" || e.Value == "Map" || e.Value == "Box" || e.Value == "_" {
+		if e.Value == "fs" || e.Value == "os" || e.Value == "Map" || e.Value == "Box" || e.Value == "Channel" || e.Value == "http" || e.Value == "net" || e.Value == "path" || e.Value == "math" || e.Value == "_" {
 			return Any
 		}
 		if _, isEnum := c.enumRegistry[e.Value]; isEnum {
@@ -567,6 +567,19 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 				case "ext", "base", "dir":
 					return &FunctionType{Params: []Type{Str}, ReturnType: Str}
 				}
+			case "math":
+				switch e.Right.Value {
+				case "abs":
+					return &FunctionType{Params: []Type{Any}, ReturnType: Any}
+				case "min", "max":
+					return &FunctionType{Params: []Type{Any, Any}, ReturnType: Any}
+				case "pow":
+					return &FunctionType{Params: []Type{Float, Float}, ReturnType: Float}
+				case "sqrt":
+					return &FunctionType{Params: []Type{Float}, ReturnType: Float}
+				case "round", "floor", "ceil":
+					return &FunctionType{Params: []Type{Float}, ReturnType: Int}
+				}
 			}
 
 			// Статические методы структуры: StructName.new(...)
@@ -642,6 +655,12 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 				return &FunctionType{Params: []Type{}, ReturnType: Str}
 			case "split":
 				return &FunctionType{Params: []Type{Str}, ReturnType: &ArrayType{Element: Str}}
+			case "to_lower":
+				return &FunctionType{Params: []Type{}, ReturnType: Str}
+			case "to_upper":
+				return &FunctionType{Params: []Type{}, ReturnType: Str}
+			case "replace":
+				return &FunctionType{Params: []Type{Str, Str}, ReturnType: Str}
 			}
 		}
 

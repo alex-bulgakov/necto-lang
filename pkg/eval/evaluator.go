@@ -24,6 +24,17 @@ var (
 	NONE  = &Option{HasValue: false}
 )
 
+func toFloat(obj Object) float64 {
+	switch o := obj.(type) {
+	case *Float:
+		return o.Value
+	case *Integer:
+		return float64(o.Value)
+	default:
+		return 0.0
+	}
+}
+
 var modules = map[string]*Module{
 	"fs": {
 		Name: "fs",
@@ -102,6 +113,100 @@ var modules = map[string]*Module{
 						return newError("path.dir() takes 1 argument (path)")
 					}
 					return &String{Value: filepath.Dir(args[0].Inspect())}
+				},
+			},
+		},
+	},
+	"math": {
+		Name: "math",
+		Methods: map[string]*Builtin{
+			"abs": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("math.abs() takes 1 argument")
+					}
+					if intVal, ok := args[0].(*Integer); ok {
+						if intVal.Value < 0 {
+							return &Integer{Value: -intVal.Value}
+						}
+						return intVal
+					}
+					if fltVal, ok := args[0].(*Float); ok {
+						return &Float{Value: math.Abs(fltVal.Value)}
+					}
+					return newError("math.abs() requires a number")
+				},
+			},
+			"min": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 2 {
+						return newError("math.min() takes 2 arguments")
+					}
+					if a, ok := args[0].(*Integer); ok {
+						if b, ok := args[1].(*Integer); ok {
+							if a.Value < b.Value {
+								return a
+							}
+							return b
+						}
+					}
+					return &Float{Value: math.Min(toFloat(args[0]), toFloat(args[1]))}
+				},
+			},
+			"max": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 2 {
+						return newError("math.max() takes 2 arguments")
+					}
+					if a, ok := args[0].(*Integer); ok {
+						if b, ok := args[1].(*Integer); ok {
+							if a.Value > b.Value {
+								return a
+							}
+							return b
+						}
+					}
+					return &Float{Value: math.Max(toFloat(args[0]), toFloat(args[1]))}
+				},
+			},
+			"pow": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 2 {
+						return newError("math.pow() takes 2 arguments (base, exp)")
+					}
+					return &Float{Value: math.Pow(toFloat(args[0]), toFloat(args[1]))}
+				},
+			},
+			"sqrt": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("math.sqrt() takes 1 argument")
+					}
+					return &Float{Value: math.Sqrt(toFloat(args[0]))}
+				},
+			},
+			"round": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("math.round() takes 1 argument")
+					}
+					return &Integer{Value: int64(math.Round(toFloat(args[0])))}
+				},
+			},
+			"floor": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("math.floor() takes 1 argument")
+					}
+					return &Integer{Value: int64(math.Floor(toFloat(args[0])))}
+				},
+			},
+			"ceil": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("math.ceil() takes 1 argument")
+					}
+					return &Integer{Value: int64(math.Ceil(toFloat(args[0])))}
 				},
 			},
 		},
@@ -1394,6 +1499,27 @@ func evalDotExpression(left Object, prop string, env ...*Environment) Object {
 						elems = append(elems, &String{Value: p})
 					}
 					return &Array{Elements: elems}
+				},
+			}
+		case "to_lower":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					return &String{Value: strings.ToLower(obj.Value)}
+				},
+			}
+		case "to_upper":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					return &String{Value: strings.ToUpper(obj.Value)}
+				},
+			}
+		case "replace":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					if len(args) != 2 {
+						return newError("str.replace() takes 2 arguments (old, new)")
+					}
+					return &String{Value: strings.ReplaceAll(obj.Value, args[0].Inspect(), args[1].Inspect())}
 				},
 			}
 		}

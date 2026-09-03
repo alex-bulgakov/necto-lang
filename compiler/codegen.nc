@@ -243,6 +243,22 @@ impl Codegen {
                 out += "} " + name + ";\n\n"
                 return out
             },
+            Stmt.EnumDecl(name, variants) => {
+                let mut out = "typedef enum {\n"
+                for i in 0..variants.len() {
+                    out += "    " + name + "_" + variants[i] + ",\n"
+                }
+                out += "} " + name + "Tag;\n\n"
+                out += "typedef struct {\n    " + name + "Tag tag;\n    union {\n        long long int_val;\n        const char* str_val;\n    } payload;\n} " + name + ";\n\n"
+                for j in 0..variants.len() {
+                    let v = variants[j]
+                    out += "static inline " + name + " " + name + "_" + v + "_val(long long val) {\n"
+                    out += "    " + name + " e; e.tag = " + name + "_" + v + "; e.payload.int_val = val; return e;\n"
+                    out += "}\n"
+                }
+                out += "\n"
+                return out
+            },
             Stmt.ImplBlock(target, methods) => {
                 let mut out = ""
                 for i in 0..methods.len() {
