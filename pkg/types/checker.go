@@ -519,6 +519,22 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 				case "args":
 					return &FunctionType{Params: []Type{}, ReturnType: &ArrayType{Element: Str}}
 				}
+			case "http":
+				resType := &EnumType{NameStr: "Result", Variants: map[string][]Type{"Ok": []Type{Str}, "Err": []Type{Str}}}
+				switch e.Right.Value {
+				case "get":
+					return &FunctionType{Params: []Type{Str}, ReturnType: resType}
+				case "post":
+					return &FunctionType{Params: []Type{Str, Str}, ReturnType: resType}
+				case "listen":
+					return &FunctionType{Params: []Type{Int, Any}, ReturnType: Bool}
+				}
+			case "net":
+				resType := &EnumType{NameStr: "Result", Variants: map[string][]Type{"Ok": []Type{Str}, "Err": []Type{Str}}}
+				switch e.Right.Value {
+				case "tcp_connect":
+					return &FunctionType{Params: []Type{Str}, ReturnType: resType}
+				}
 			case "Map":
 				switch e.Right.Value {
 				case "new":

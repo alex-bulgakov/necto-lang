@@ -2,7 +2,10 @@ package eval
 
 import (
 	"fmt"
+	"io"
 	"math"
+	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -109,6 +112,108 @@ var modules = map[string]*Module{
 			},
 		},
 	},
+}
+
+func init() {
+	modules["http"] = &Module{
+		Name: "http",
+		Methods: map[string]*Builtin{
+			"get": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("http.get() takes 1 argument (url)")
+					}
+					urlStr := args[0].Inspect()
+					client := &http.Client{Timeout: 10 * time.Second}
+					resp, err := client.Get(urlStr)
+					if err != nil {
+						return &ResultInstance{IsErr: true, Value: &String{Value: err.Error()}}
+					}
+					defer resp.Body.Close()
+					bodyBytes, err := io.ReadAll(resp.Body)
+					if err != nil {
+						return &ResultInstance{IsErr: true, Value: &String{Value: err.Error()}}
+					}
+					return &ResultInstance{IsErr: false, Value: &String{Value: string(bodyBytes)}}
+				},
+			},
+			"post": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 2 {
+						return newError("http.post() takes 2 arguments (url, body)")
+					}
+					urlStr := args[0].Inspect()
+					bodyStr := args[1].Inspect()
+					client := &http.Client{Timeout: 10 * time.Second}
+					resp, err := client.Post(urlStr, "application/json", strings.NewReader(bodyStr))
+					if err != nil {
+						return &ResultInstance{IsErr: true, Value: &String{Value: err.Error()}}
+					}
+					defer resp.Body.Close()
+					bodyBytes, err := io.ReadAll(resp.Body)
+					if err != nil {
+						return &ResultInstance{IsErr: true, Value: &String{Value: err.Error()}}
+					}
+					return &ResultInstance{IsErr: false, Value: &String{Value: string(bodyBytes)}}
+				},
+			},
+			"listen": {
+				Fn: func(args ...Object) Object {
+					if len(args) < 2 {
+						return newError("http.listen() takes 2 arguments (port, handler)")
+					}
+					portInt, ok := args[0].(*Integer)
+					if !ok {
+						return newError("port must be an integer")
+					}
+
+					mux := http.NewServeMux()
+					mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+						reqObj := &String{Value: r.URL.Path}
+						res := applyFunction(args[1], []Object{reqObj})
+						if res != nil {
+							if res.Type() == RETURN_VALUE_OBJ {
+								res = res.(*ReturnValue).Value
+							}
+							if s, ok := res.(*String); ok {
+								w.Write([]byte(s.Value))
+							} else {
+								w.Write([]byte(res.Inspect()))
+							}
+						}
+					})
+
+					server := &http.Server{
+						Addr:    fmt.Sprintf(":%d", portInt.Value),
+						Handler: mux,
+					}
+					go server.ListenAndServe()
+					time.Sleep(10 * time.Millisecond)
+					return TRUE
+				},
+			},
+		},
+	}
+
+	modules["net"] = &Module{
+		Name: "net",
+		Methods: map[string]*Builtin{
+			"tcp_connect": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("net.tcp_connect() takes 1 argument (address)")
+					}
+					addr := args[0].Inspect()
+					conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+					if err != nil {
+						return &ResultInstance{IsErr: true, Value: &String{Value: err.Error()}}
+					}
+					conn.Close()
+					return &ResultInstance{IsErr: false, Value: &String{Value: "connected"}}
+				},
+			},
+		},
+	}
 }
 
 var builtins = map[string]*Builtin{

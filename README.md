@@ -1,7 +1,8 @@
-# Necto Programming Language (v0.8.0-alpha)
+# Necto Programming Language (v0.9.0-alpha)
 
 **Necto** (от лат. *nectere / necto* — *«связывать воедино», «сплетать»*) — современный универсальный системный язык программирования, сплетающий воедино лучшие инженерные практики:
 - **Синтез лучших концепций**:
+  - **Встроенный сетевой стек и веб-сервер (`http` & `net`)**: легковесный HTTP-сервер (`http.listen`), HTTP-клиент (`http.get`, `http.post`) и сокеты (`net.tcp_connect`).
   - **C Foreign Function Interface (FFI)** через блоки `extern "C"` (`extern "C" { fn sqrt(x: float) -> float }`).
   - Объектные методы и блоки **`impl`** с поддержкой `self` (`impl Lexer { fn next_char(mut self) { ... } }`).
   - Эргономичная и безопасная обработка ошибок через **`Result[T, E]`** (`Result.Ok`, `Result.Err`) и оператор распространения ошибок **`?`** (`let data = fs.read_file("file.nc")?`).
@@ -50,24 +51,29 @@ cd my_app
 .\bin\necto.exe fmt --check
 ```
 
-3. **Запуск C FFI примера:**
+3. **Запуск встроенного HTTP веб-сервера:**
+```powershell
+.\bin\necto.exe run examples/12_http_server.nc
+```
+
+4. **Запуск C FFI примера:**
 ```powershell
 .\bin\necto.exe run examples/11_c_interop.nc
 .\bin\necto.exe build examples/11_c_interop.nc -o c_app.exe
 ```
 
-4. **Автономная сборка компилятора (`necto bootstrap`):**
+5. **Автономная сборка компилятора (`necto bootstrap`):**
 ```powershell
 .\bin\necto.exe bootstrap
 .\bin\necto-native.exe
 ```
 
-5. **Запуск встроенных юнит-тестов (`necto test`):**
+6. **Запуск встроенных юнит-тестов (`necto test`):**
 ```powershell
-.\bin\necto.exe test compiler/main.nc
+.\bin\necto.exe test examples/12_http_server.nc
 ```
 
-5. **Компиляция Necto-файла в нативный исполняемый файл `.exe` через Clang/LLVM:**
+7. **Компиляция Necto-файла в нативный исполняемый файл `.exe` через Clang/LLVM:**
 ```powershell
 .\bin\necto.exe build examples/02_fibonacci.nc -o fib.exe
 .\fib.exe
