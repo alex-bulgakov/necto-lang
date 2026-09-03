@@ -2,7 +2,7 @@
   "name": "necto-language",
   "displayName": "Necto Programming Language",
   "description": "Rich language support and syntax highlighting for Necto (.nc)",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "publisher": "alex-bulgakov",
   "engines": {
     "vscode": "^1.75.0"

@@ -21,7 +21,7 @@ import (
 	"necto/pkg/types"
 )
 
-const VERSION = "0.10.0-alpha"
+const VERSION = "1.0.0"
 
 type ProjectConfig struct {
 	Name         string            `json:"name"`
