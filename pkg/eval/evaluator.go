@@ -258,6 +258,7 @@ func Eval(node ast.Node, env *Environment) Object {
 		return NULL
 
 	case *ast.EnumDeclaration:
+		env.Set(n.Name.Value, &EnumInstance{EnumName: n.Name.Value, Variant: ""})
 		return NULL
 
 	case *ast.AssertStatement:
@@ -392,6 +393,13 @@ func Eval(node ast.Node, env *Environment) Object {
 				if def, ok := obj.(*StructDefinition); ok {
 					if method, ok := def.Methods[n.Right.Value]; ok {
 						return method
+					}
+				}
+				if enumInst, ok := obj.(*EnumInstance); ok {
+					return &EnumInstance{
+						EnumName: enumInst.EnumName,
+						Variant:  n.Right.Value,
+						Fields:   nil,
 					}
 				}
 			}
@@ -644,6 +652,53 @@ func evalInfixExpression(operator string, left, right Object) Object {
 			return nativeBoolToBooleanObject(left.(*String).Value == right.(*String).Value)
 		case "!=":
 			return nativeBoolToBooleanObject(left.(*String).Value != right.(*String).Value)
+		}
+	}
+
+	if leftEnum, ok := left.(*EnumInstance); ok {
+		if rightEnum, ok := right.(*EnumInstance); ok {
+			same := leftEnum.EnumName == rightEnum.EnumName && leftEnum.Variant == rightEnum.Variant && len(leftEnum.Fields) == len(rightEnum.Fields)
+			if same {
+				for i := range leftEnum.Fields {
+					if leftEnum.Fields[i].Inspect() != rightEnum.Fields[i].Inspect() {
+						same = false
+						break
+					}
+				}
+			}
+			if operator == "==" {
+				return nativeBoolToBooleanObject(same)
+			}
+			if operator == "!=" {
+				return nativeBoolToBooleanObject(!same)
+			}
+		}
+	}
+
+	if leftOpt, ok := left.(*Option); ok {
+		if rightOpt, ok := right.(*Option); ok {
+			same := leftOpt.HasValue == rightOpt.HasValue
+			if same && leftOpt.HasValue {
+				same = leftOpt.Value.Inspect() == rightOpt.Value.Inspect()
+			}
+			if operator == "==" {
+				return nativeBoolToBooleanObject(same)
+			}
+			if operator == "!=" {
+				return nativeBoolToBooleanObject(!same)
+			}
+		}
+	}
+
+	if leftRes, ok := left.(*ResultInstance); ok {
+		if rightRes, ok := right.(*ResultInstance); ok {
+			same := leftRes.IsErr == rightRes.IsErr && leftRes.Value.Inspect() == rightRes.Value.Inspect()
+			if operator == "==" {
+				return nativeBoolToBooleanObject(same)
+			}
+			if operator == "!=" {
+				return nativeBoolToBooleanObject(!same)
+			}
 		}
 	}
 

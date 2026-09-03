@@ -1,4 +1,4 @@
-# Necto Programming Language (v0.4.0-alpha)
+# Necto Programming Language (v0.5.0-alpha)
 
 **Necto** (от лат. *nectere / necto* — *«связывать воедино», «сплетать»*) — современный универсальный системный язык программирования, сплетающий воедино лучшие инженерные практики:
 - **Синтез лучших концепций**:
@@ -13,10 +13,9 @@
 - **Два режима выполнения**:
   - **Мгновенный интерпретатор** (`necto run script.nc`) для быстрой разработки, скриптинга и REPL.
   - **Native Compiler** (`necto build script.nc -o app.exe`) через Clang 17 / LLVM, компилирующий код в самостоятельные нативные исполняемые файлы `.exe`.
-- **Путь к полному самохостингу (Self-Hosting)**:
-  - Компонент 1: Лексер языка Necto на чистом Necto ([`examples/07_mini_lexer.nc`](file:///d:/Projects/newLanguage/examples/07_mini_lexer.nc)).
-  - Компонент 2: Синтаксический AST-парсер на чистом Necto ([`examples/08_mini_parser.nc`](file:///d:/Projects/newLanguage/examples/08_mini_parser.nc)).
-  - Компонент 3: **Сквозной пайплайн компилятора на чистом Necto (Lexer $\rightarrow$ Parser $\rightarrow$ Codegen)** ([`examples/10_self_compiler_pipeline.nc`](file:///d:/Projects/newLanguage/examples/10_self_compiler_pipeline.nc))!
+- **Самохостинговый компилятор (Self-Hosting Stage 1)**:
+  - Компилятор Necto полностью реализован на самом языке Necto в пакете [**`compiler/`**](compiler/)!
+  - `compiler/token.nc` $\rightarrow$ `compiler/lexer.nc` $\rightarrow$ `compiler/ast.nc` $\rightarrow$ `compiler/parser.nc` $\rightarrow$ `compiler/codegen.nc` $\rightarrow$ `compiler/main.nc`.
 
 - **Официальная документация:**
   - Полная спецификация языка: [**`SPECIFICATION.md`**](SPECIFICATION.md)

@@ -15,7 +15,7 @@ import (
 	"necto/pkg/types"
 )
 
-const VERSION = "0.4.0-alpha"
+const VERSION = "0.5.0-alpha"
 
 func printUsage() {
 	fmt.Println("Necto Programming Language Compiler & Runtime")

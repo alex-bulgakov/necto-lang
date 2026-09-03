@@ -587,6 +587,14 @@ func (p *Parser) parseEnumDeclaration() *ast.EnumDeclaration {
 }
 
 func (p *Parser) parseTypeFromCurrentToken() string {
+	if p.curTokenIs(token.LBRACKET) {
+		inner := p.parseTypeSignature()
+		if !p.expectPeek(token.RBRACKET) {
+			return "[" + inner + "]"
+		}
+		return "[" + inner + "]"
+	}
+
 	typeStr := p.curToken.Literal
 	if p.peekTokenIs(token.LBRACKET) {
 		p.nextToken() // [
