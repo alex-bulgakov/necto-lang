@@ -201,6 +201,8 @@ func (c *Checker) checkStatement(stmt ast.Statement) {
 		c.checkFnBody(s)
 	case *ast.TestBlockStatement:
 		c.checkBlockStatement(s.Body)
+	case *ast.BenchmarkBlockStatement:
+		c.checkBlockStatement(s.Body)
 	case *ast.AssertStatement:
 		condT := c.checkExpression(s.Condition)
 		if !condT.Equals(Bool) && !condT.Equals(Any) {

@@ -95,6 +95,7 @@ const (
 	FROM     = "FROM"
 	IMPL     = "IMPL"
 	EXTERN   = "EXTERN"
+	BENCH    = "BENCH"
 )
 
 var keywords = map[string]TokenType{
@@ -122,6 +123,7 @@ var keywords = map[string]TokenType{
 	"Some":     SOME,
 	"None":     NONE,
 	"test":     TEST,
+	"bench":    BENCH,
 	"assert":   ASSERT,
 	"from":     FROM,
 	"impl":     IMPL,

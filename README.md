@@ -1,7 +1,9 @@
-# Necto Programming Language (v0.9.0-alpha)
+# Necto Programming Language (v0.10.0-alpha)
 
 **Necto** (от лат. *nectere / necto* — *«связывать воедино», «сплетать»*) — современный универсальный системный язык программирования, сплетающий воедино лучшие инженерные практики:
 - **Синтез лучших концепций**:
+  - **Встроенный бенчмаркер производительности (`necto bench`)**: блоки `bench "name" { ... }` с замером времени на итерацию (`ns/op`) и пропускной способности (`ops/s`).
+  - **Автоматический генератор документации (`necto doc`)**: интерактивный современный HTML-сайт с поиском по doc-комментариям `///`.
   - **Встроенный сетевой стек и веб-сервер (`http` & `net`)**: легковесный HTTP-сервер (`http.listen`), HTTP-клиент (`http.get`, `http.post`) и сокеты (`net.tcp_connect`).
   - **C Foreign Function Interface (FFI)** через блоки `extern "C"` (`extern "C" { fn sqrt(x: float) -> float }`).
   - Объектные методы и блоки **`impl`** с поддержкой `self` (`impl Lexer { fn next_char(mut self) { ... } }`).
@@ -70,21 +72,33 @@ cd my_app
 
 6. **Запуск встроенных юнит-тестов (`necto test`):**
 ```powershell
-.\bin\necto.exe test examples/12_http_server.nc
+.\bin\necto.exe test examples/13_benchmarks_and_docs.nc
 ```
 
-7. **Компиляция Necto-файла в нативный исполняемый файл `.exe` через Clang/LLVM:**
+7. **Запуск бенчмарков производительности (`necto bench`):**
+```powershell
+.\bin\necto.exe bench examples/13_benchmarks_and_docs.nc
+```
+
+8. **Генерация интерактивной документации (`necto doc`):**
+```powershell
+.\bin\necto.exe doc . --output docs
+# Для запуска локального веб-сервера документации:
+.\bin\necto.exe doc . --serve
+```
+
+9. **Компиляция Necto-файла в нативный исполняемый файл `.exe` через Clang/LLVM:**
 ```powershell
 .\bin\necto.exe build examples/02_fibonacci.nc -o fib.exe
 .\fib.exe
 ```
 
-6. **Статическая проверка типов (Type Check):**
+10. **Статическая проверка типов (Type Check):**
 ```powershell
 .\bin\necto.exe check compiler/main.nc
 ```
 
-7. **Интерактивная консоль (REPL):**
+11. **Интерактивная консоль (REPL):**
 ```powershell
 .\bin\necto.exe repl
 ```

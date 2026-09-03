@@ -222,6 +222,8 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseImportStatement()
 	case token.TEST:
 		return p.parseTestBlockStatement()
+	case token.BENCH:
+		return p.parseBenchmarkBlockStatement()
 	case token.ASSERT:
 		return p.parseAssertStatement()
 	case token.BREAK:
@@ -326,7 +328,10 @@ func (p *Parser) parseForInStatement() *ast.ForInStatement {
 }
 
 func (p *Parser) parseFnDeclaration() *ast.FnDeclaration {
-	stmt := &ast.FnDeclaration{Token: p.curToken}
+	stmt := &ast.FnDeclaration{
+		Token:      p.curToken,
+		DocComment: p.l.GetAndResetDocComment(),
+	}
 
 	if !p.expectPeek(token.IDENT) {
 		return nil
@@ -449,7 +454,10 @@ func (p *Parser) parseTypeSignature() string {
 }
 
 func (p *Parser) parseStructDeclaration() *ast.StructDeclaration {
-	stmt := &ast.StructDeclaration{Token: p.curToken}
+	stmt := &ast.StructDeclaration{
+		Token:      p.curToken,
+		DocComment: p.l.GetAndResetDocComment(),
+	}
 
 	if !p.expectPeek(token.IDENT) {
 		return nil
@@ -585,7 +593,10 @@ func (p *Parser) parseExternBlockStatement() *ast.ExternBlockStatement {
 }
 
 func (p *Parser) parseEnumDeclaration() *ast.EnumDeclaration {
-	stmt := &ast.EnumDeclaration{Token: p.curToken}
+	stmt := &ast.EnumDeclaration{
+		Token:      p.curToken,
+		DocComment: p.l.GetAndResetDocComment(),
+	}
 
 	if !p.expectPeek(token.IDENT) {
 		return nil
@@ -712,6 +723,22 @@ func (p *Parser) parseImportStatement() *ast.ImportStatement {
 
 func (p *Parser) parseTestBlockStatement() *ast.TestBlockStatement {
 	stmt := &ast.TestBlockStatement{Token: p.curToken}
+
+	if !p.expectPeek(token.STRING) {
+		return nil
+	}
+	stmt.Name = p.curToken.Literal
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	stmt.Body = p.parseBlockStatement()
+	return stmt
+}
+
+func (p *Parser) parseBenchmarkBlockStatement() *ast.BenchmarkBlockStatement {
+	stmt := &ast.BenchmarkBlockStatement{Token: p.curToken}
 
 	if !p.expectPeek(token.STRING) {
 		return nil

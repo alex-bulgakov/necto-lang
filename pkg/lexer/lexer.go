@@ -10,12 +10,13 @@ import (
 )
 
 type Lexer struct {
-	input        string
-	position     int  // текущая позиция в input (указывает на ch)
-	readPosition int  // текущая позиция чтения (после ch)
-	ch           rune // текущий символ
-	line         int  // номер строки (1-indexed)
-	col          int  // номер колонки (1-indexed)
+	input             string
+	position          int  // текущая позиция в input (указывает на ch)
+	readPosition      int  // текущая позиция чтения (после ch)
+	ch                rune // текущий символ
+	line              int  // номер строки (1-indexed)
+	col               int  // номер колонки (1-indexed)
+	docCommentBuilder strings.Builder
 }
 
 func New(input string) *Lexer {
@@ -239,9 +240,21 @@ func (l *Lexer) skipWhitespaceAndComments() {
 		// Проверяем комментарии
 		if l.ch == '/' {
 			if l.peekChar() == '/' {
-				// Строчный комментарий //
+				// Строчный комментарий // или ///
+				isDoc := false
+				if l.readPosition < len(l.input) && l.input[l.readPosition] == '/' {
+					isDoc = true
+				}
+				startPos := l.position
 				for l.ch != '\n' && l.ch != 0 {
 					l.readChar()
+				}
+				if isDoc {
+					commentLine := strings.TrimPrefix(l.input[startPos:l.position], "///")
+					if l.docCommentBuilder.Len() > 0 {
+						l.docCommentBuilder.WriteString("\n")
+					}
+					l.docCommentBuilder.WriteString(strings.TrimSpace(commentLine))
 				}
 				continue
 			} else if l.peekChar() == '*' {
@@ -363,6 +376,12 @@ func isHexDigit(ch rune) bool {
 	return (ch >= '0' && ch <= '9') ||
 		(ch >= 'a' && ch <= 'f') ||
 		(ch >= 'A' && ch <= 'F')
+}
+
+func (l *Lexer) GetAndResetDocComment() string {
+	doc := l.docCommentBuilder.String()
+	l.docCommentBuilder.Reset()
+	return doc
 }
 
 func newToken(tokenType token.TokenType, ch rune, pos token.Pos) token.Token {

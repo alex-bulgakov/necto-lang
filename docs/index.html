@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Necto Documentation v0.10.0-alpha — Documentation</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-heading: #f0f6fc;
+            --accent: #58a6ff;
+            --badge-fn: #238636;
+            --badge-struct: #1f6feb;
+            --badge-enum: #a371f7;
+            --code-bg: #090d13;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+        aside {
+            width: 320px;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .sidebar-header h1 {
+            font-size: 1.25rem;
+            color: var(--text-heading);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .sidebar-header .version-tag {
+            font-size: 0.75rem;
+            background: #21262d;
+            padding: 2px 8px;
+            border-radius: 12px;
+            color: var(--accent);
+        }
+        .search-box {
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .search-box input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 0.875rem;
+            outline: none;
+        }
+        .search-box input:focus { border-color: var(--accent); }
+        .symbol-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .symbol-item {
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2px;
+            font-size: 0.875rem;
+        }
+        .symbol-item:hover { background: #21262d; color: var(--text-heading); }
+        .badge {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .badge-Function { background: rgba(35, 134, 54, 0.2); color: #3fb950; border: 1px solid rgba(35,134,54,0.4); }
+        .badge-Struct { background: rgba(31, 111, 235, 0.2); color: #58a6ff; border: 1px solid rgba(31,111,235,0.4); }
+        .badge-Enum { background: rgba(163, 113, 247, 0.2); color: #bc8cff; border: 1px solid rgba(163,113,247,0.4); }
+        main {
+            flex: 1;
+            overflow-y: auto;
+            padding: 40px;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .card-title {
+            font-size: 1.35rem;
+            color: var(--text-heading);
+            font-family: monospace;
+        }
+        .card-file {
+            font-size: 0.75rem;
+            color: #8b949e;
+            margin-left: auto;
+        }
+        .signature-block {
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px 16px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #e6edf3;
+            white-space: pre-wrap;
+            margin-bottom: 14px;
+        }
+        .doc-text {
+            color: #8b949e;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <aside>
+        <div class="sidebar-header">
+            <h1>Necto Documentation <span class="version-tag">v0.10.0-alpha</span></h1>
+        </div>
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Search symbols..." autocomplete="off">
+        </div>
+        <div class="symbol-list" id="symbolList"></div>
+    </aside>
+    <main id="mainContent">
+        <h2 style="margin-bottom: 20px; color: var(--text-heading);">API Reference</h2>
+        <div id="cardsList"></div>
+    </main>
+
+    <script>
+        const items = [{"Kind":"Enum","Name":"Expr","Signature":"enum Expr {\n    Num(int),\n    StrVal(str),\n    BoolVal(bool),\n    Var(str),\n    Binary(str, Box[Expr], Box[Expr]),\n    Unary(str, Box[Expr]),\n    Call(str, [Expr]),\n    MethodCall(Box[Expr], str, [Expr]),\n    Try(Box[Expr]),\n    BoxNew(Box[Expr]),\n    Dot(Box[Expr], str)\n}","Doc":"// compiler/ast.nc\n// Модуль синтаксического дерева (AST) для самохостингового компилятора Necto","File":"ast.nc"},{"Kind":"Enum","Name":"Stmt","Signature":"enum Stmt {\n    Let(str, bool, str, Expr),\n    Assign(str, str, Expr),\n    Return(Expr),\n    ExprStmt(Expr),\n    If(Expr, [Stmt], [Stmt]),\n    While(Expr, [Stmt]),\n    ForIn(str, int, int, [Stmt]),\n    FnDecl(str, [str], str, [Stmt]),\n    StructDecl(str, [str]),\n    ImplBlock(str, [Stmt]),\n    Assert(Expr)\n}","Doc":"","File":"ast.nc"},{"Kind":"Struct","Name":"Codegen","Signature":"struct Codegen {\n    indent_level: int\n}","Doc":"// compiler/codegen.nc\n// Модуль генератора нативного C-кода (Codegen) для самохостингового компилятора Necto","File":"codegen.nc"},{"Kind":"Struct","Name":"Lexer","Signature":"struct Lexer {\n    source: str,\n    cursor: int,\n    line: int,\n    col: int\n}","Doc":"// compiler/lexer.nc\n// Модуль лексического анализатора (Lexer) для самохостингового компилятора Necto","File":"lexer.nc"},{"Kind":"Function","Name":"compile_source_to_c","Signature":"fn compile_source_to_c(source: str) -\u003e Result[str, str]","Doc":"// compiler/main.nc\n// Точка входа самохостингового компилятора Necto (Stage 1)\n// Написано на 100% чистом языке Necto!","File":"main.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"// let, mut, x, =, 42, +, 10, Eof","File":"main.nc"},{"Kind":"Struct","Name":"Parser","Signature":"struct Parser {\n    tokens: [Token],\n    cursor: int\n}","Doc":"// compiler/parser.nc\n// Модуль синтаксического анализатора (Parser) для самохостингового компилятора Necto","File":"parser.nc"},{"Kind":"Enum","Name":"Token","Signature":"enum Token {\n    Ident(str),\n    IntLit(int),\n    StrLit(str),\n    BoolLit(bool),\n    Fn,\n    Let,\n    Mut,\n    If,\n    Else,\n    While,\n    For,\n    In,\n    Return,\n    Struct,\n    Impl,\n    Enum,\n    Match,\n    Import,\n    From,\n    Test,\n    Assert,\n    Break,\n    Continue,\n    Plus,\n    Minus,\n    Star,\n    Slash,\n    Percent,\n    Eq,\n    NotEq,\n    Lt,\n    Lte,\n    Gt,\n    Gte,\n    Assign,\n    PlusAssign,\n    MinusAssign,\n    Question,\n    Arrow,\n    FatArrow,\n    LParen,\n    RParen,\n    LBrace,\n    RBrace,\n    LBracket,\n    RBracket,\n    Comma,\n    Colon,\n    Semicolon,\n    Dot,\n    DotDot,\n    Eof,\n    Illegal(str)\n}","Doc":"// compiler/token.nc\n// Модуль определения токенов языка Necto для самохостингового компилятора","File":"token.nc"},{"Kind":"Function","Name":"lookup_keyword","Signature":"fn lookup_keyword(name: str) -\u003e Option[Token]","Doc":"// Литералы и идентификаторы\n// Ключевые слова\n// Операторы\n// Разделители\n// Служебные","File":"token.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"// 01_hello.Necto\n// Базовый синтаксис, переменные, иммутабельность и интерполяция строк","File":"01_hello.nc"},{"Kind":"Function","Name":"fib","Signature":"fn fib(n: int) -\u003e int","Doc":"// 02_fibonacci.Necto\n// Вычисления, функции, рекурсия и циклы","File":"02_fibonacci.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"","File":"02_fibonacci.nc"},{"Kind":"Struct","Name":"Vector2","Signature":"struct Vector2 {\n    x: int,\n    y: int\n}","Doc":"// 03_structs.Necto\n// Пользовательские структуры, поля, композиция и мутации","File":"03_structs.nc"},{"Kind":"Struct","Name":"Player","Signature":"struct Player {\n    id: int,\n    name: str,\n    hp: int\n}","Doc":"","File":"03_structs.nc"},{"Kind":"Function","Name":"print_player","Signature":"fn print_player(p: Player)","Doc":"","File":"03_structs.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"","File":"03_structs.nc"},{"Kind":"Function","Name":"find_user_role","Signature":"fn find_user_role(user_id: int) -\u003e Option[str]","Doc":"// 04_option_safety.Necto\n// Безопасность памяти и типов: Option[T] вместо null и Pattern Matching","File":"04_option_safety.nc"},{"Kind":"Function","Name":"describe_role","Signature":"fn describe_role(user_id: int)","Doc":"","File":"04_option_safety.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"","File":"04_option_safety.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"// 05_file_io.Necto\n// Системный ввод/вывод: создание, запись и чтение файлов","File":"05_file_io.nc"},{"Kind":"Function","Name":"test_dynamic_arrays","Signature":"fn test_dynamic_arrays()","Doc":"// 06_collections.Necto\n// Динамические массивы, хеш-таблицы (Map), строковые операции и аргументы ОС","File":"06_collections.nc"},{"Kind":"Function","Name":"test_hash_maps","Signature":"fn test_hash_maps()","Doc":"","File":"06_collections.nc"},{"Kind":"Function","Name":"test_string_manipulation","Signature":"fn test_string_manipulation()","Doc":"","File":"06_collections.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"","File":"06_collections.nc"},{"Kind":"Struct","Name":"Token","Signature":"struct Token {\n    kind: str,\n    literal: str,\n    pos: int\n}","Doc":"// 07_mini_lexer.Necto\n// Первый рабочий лексер компилятора, написанный на самом языке Necto!\n// Демонстрирует готовность Necto к реализации собственного компилятора (Self-Hosting).","File":"07_mini_lexer.nc"},{"Kind":"Function","Name":"is_whitespace","Signature":"fn is_whitespace(code: int) -\u003e bool","Doc":"","File":"07_mini_lexer.nc"},{"Kind":"Function","Name":"is_digit","Signature":"fn is_digit(code: int) -\u003e bool","Doc":"// 32 = ' ', 9 = '\\t', 10 = '\\n', 13 = '\\r'","File":"07_mini_lexer.nc"},{"Kind":"Function","Name":"is_alpha","Signature":"fn is_alpha(code: int) -\u003e bool","Doc":"// '0'..'9' -\u003e 48..57","File":"07_mini_lexer.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"// 'a'..'z' -\u003e 97..122, 'A'..'Z' -\u003e 65..90, '_' -\u003e 95","File":"07_mini_lexer.nc"},{"Kind":"Enum","Name":"Token","Signature":"enum Token {\n    Num(int),\n    Plus,\n    Minus,\n    Star,\n    Slash,\n    LParen,\n    RParen,\n    Eof\n}","Doc":"// 08_mini_parser.nc\n// Второй ключевой шаг к самохостингу: синтаксический анализатор (AST Parser),\n// написанный на чистом Necto с использованием Tagged Enums и Box[T]!","File":"08_mini_parser.nc"},{"Kind":"Enum","Name":"Expr","Signature":"enum Expr {\n    Number(int),\n    Binary(str, Box[Expr], Box[Expr])\n}","Doc":"","File":"08_mini_parser.nc"},{"Kind":"Function","Name":"tokenize","Signature":"fn tokenize(input: str) -\u003e [Token]","Doc":"// 1. Лексер выражений","File":"08_mini_parser.nc"},{"Kind":"Function","Name":"eval_ast","Signature":"fn eval_ast(e: Expr) -\u003e int","Doc":"// Пропускаем пробелы\n// Сканируем число\n// Преобразуем строку в число\n// 2. Вычисление AST дерева","File":"08_mini_parser.nc"},{"Kind":"Function","Name":"print_ast","Signature":"fn print_ast(e: Expr) -\u003e str","Doc":"// 3. Вывод AST дерева в строку","File":"08_mini_parser.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"","File":"08_mini_parser.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"// 09_modules_and_tests.nc\n// Демонстрация многофайловых модулей (import) и встроенных тестов (test / assert)","File":"09_modules_and_tests.nc"},{"Kind":"Enum","Name":"Token","Signature":"enum Token {\n    Number(int),\n    Plus,\n    Minus,\n    Star,\n    Slash,\n    LParen,\n    RParen,\n    Eof\n}","Doc":"// 10_self_compiler_pipeline.nc\n// Necto v0.4.0-alpha Milestone:\n// Полноценный объектно-ориентированный пайплайн компилятора на чистом Necto\n// с использованием методов (impl), Result[T, E] и оператора распространения ошибок '?'!","File":"10_self_compiler_pipeline.nc"},{"Kind":"Enum","Name":"Expr","Signature":"enum Expr {\n    Num(int),\n    Binary(str, Box[Expr], Box[Expr])\n}","Doc":"","File":"10_self_compiler_pipeline.nc"},{"Kind":"Struct","Name":"Lexer","Signature":"struct Lexer {\n    source: str,\n    cursor: int\n}","Doc":"// 1. Лексер со структурой и методами (impl Lexer)","File":"10_self_compiler_pipeline.nc"},{"Kind":"Struct","Name":"Parser","Signature":"struct Parser {\n    tokens: [Token],\n    cursor: int\n}","Doc":"// Пропуск пробельных символов\n// 2. Парсер со структурой и методами (impl Parser)","File":"10_self_compiler_pipeline.nc"},{"Kind":"Struct","Name":"Codegen","Signature":"struct Codegen {\n    temp_var_id: int\n}","Doc":"// 3. Кодогенератор AST -\u003e C код (impl Codegen)","File":"10_self_compiler_pipeline.nc"},{"Kind":"Function","Name":"run_compiler_pipeline","Signature":"fn run_compiler_pipeline(source: str) -\u003e Result[str, str]","Doc":"// 4. Сквозной пайплайн с оператором '?'","File":"10_self_compiler_pipeline.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"","File":"10_self_compiler_pipeline.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"// 11_c_interop.nc\n// Necto v0.7.0-alpha Milestone:\n// Прямой вызов функций Си-библиотек через блоки extern \"C\" (C FFI)","File":"11_c_interop.nc"},{"Kind":"Function","Name":"handle_request","Signature":"fn handle_request(path: str) -\u003e str","Doc":"// 12_http_server.nc\n// Necto v0.9.0-alpha Milestone:\n// Полноценный HTTP веб-сервер и HTTP-клиент на чистом Necto","File":"12_http_server.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"// Запуск локального сервера на порту 8899\n// Выполнение клиентского запроса через http.get","File":"12_http_server.nc"},{"Kind":"Struct","Name":"Point","Signature":"struct Point {\n    x: int,\n    y: int\n}","Doc":"// 13_benchmarks_and_docs.nc\n// Necto v0.10.0-alpha Milestone:\n// Документирование кода (/// doc-комментарии) и замеры производительности (bench)\nСтруктура точки в двумерном пространстве","File":"13_benchmarks_and_docs.nc"},{"Kind":"Function","Name":"fib_recursive","Signature":"fn fib_recursive(n: int) -\u003e int","Doc":"Вычисляет N-ое число Фибоначчи рекурсивным способом.\nВнимание: имеет экспоненциальную сложность O(2^n).","File":"13_benchmarks_and_docs.nc"},{"Kind":"Function","Name":"fib_iterative","Signature":"fn fib_iterative(n: int) -\u003e int","Doc":"Вычисляет N-ое число Фибоначчи линейным итеративным алгоритмом.\nИмеет линейную сложность O(n) и минимальное потребление памяти.","File":"13_benchmarks_and_docs.nc"},{"Kind":"Function","Name":"main","Signature":"fn main()","Doc":"Проверка корректности математических функций\n// ------------------------------------------------------------------\n// Блоки встроенных бенчмарков производительности\n// Запуск: necto bench examples/13_benchmarks_and_docs.nc\n// ------------------------------------------------------------------","File":"13_benchmarks_and_docs.nc"},{"Kind":"Function","Name":"add","Signature":"fn add(a: int, b: int) -\u003e int","Doc":"// math_utils.nc\n// Модуль вспомогательных математических функций для Necto","File":"math_utils.nc"},{"Kind":"Function","Name":"multiply","Signature":"fn multiply(a: int, b: int) -\u003e int","Doc":"","File":"math_utils.nc"},{"Kind":"Function","Name":"square","Signature":"fn square(x: int) -\u003e int","Doc":"","File":"math_utils.nc"}];
+        const searchInput = document.getElementById('searchInput');
+        const symbolList = document.getElementById('symbolList');
+        const cardsList = document.getElementById('cardsList');
+
+        function render(filter = '') {
+            symbolList.innerHTML = '';
+            cardsList.innerHTML = '';
+            const lower = filter.toLowerCase();
+
+            items.filter(it => it.Name.toLowerCase().includes(lower) || it.Kind.toLowerCase().includes(lower)).forEach((it, idx) => {
+                const navItem = document.createElement('div');
+                navItem.className = 'symbol-item';
+                navItem.innerHTML = '<span>' + it.Name + '</span><span class="badge badge-' + it.Kind + '">' + it.Kind + '</span>';
+                navItem.onclick = () => {
+                    const el = document.getElementById('item-' + idx);
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                };
+                symbolList.appendChild(navItem);
+
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.id = 'item-' + idx;
+                card.innerHTML = 
+                    '<div class="card-header">' +
+                        '<span class="badge badge-' + it.Kind + '">' + it.Kind + '</span>' +
+                        '<span class="card-title">' + it.Name + '</span>' +
+                        '<span class="card-file">' + it.File + '</span>' +
+                    '</div>' +
+                    '<div class="signature-block">' + it.Signature + '</div>' +
+                    '<div class="doc-text">' + (it.Doc ? it.Doc : '<em style="color: #484f58">No documentation provided.</em>') + '</div>';
+                cardsList.appendChild(card);
+            });
+        }
+
+        searchInput.addEventListener('input', (e) => render(e.target.value));
+        render();
+    </script>
+</body>
+</html>

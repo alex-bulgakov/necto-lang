@@ -181,6 +181,7 @@ type FnDeclaration struct {
 	Parameters []*Parameter
 	ReturnType string
 	Body       *BlockStatement
+	DocComment string
 }
 
 func (fd *FnDeclaration) statementNode()       {}
@@ -207,9 +208,10 @@ type StructFieldDecl struct {
 }
 
 type StructDeclaration struct {
-	Token  token.Token // токен STRUCT
-	Name   *Identifier
-	Fields []*StructFieldDecl
+	Token      token.Token // токен STRUCT
+	Name       *Identifier
+	Fields     []*StructFieldDecl
+	DocComment string
 }
 
 func (sd *StructDeclaration) statementNode()       {}
@@ -231,9 +233,10 @@ type EnumVariantDecl struct {
 }
 
 type EnumDeclaration struct {
-	Token    token.Token // токен ENUM
-	Name     *Identifier
-	Variants []*EnumVariantDecl
+	Token      token.Token // токен ENUM
+	Name       *Identifier
+	Variants   []*EnumVariantDecl
+	DocComment string
 }
 
 func (ed *EnumDeclaration) statementNode()       {}
@@ -281,6 +284,19 @@ func (tb *TestBlockStatement) TokenLiteral() string { return tb.Token.Literal }
 func (tb *TestBlockStatement) Pos() token.Pos       { return tb.Token.Pos }
 func (tb *TestBlockStatement) String() string {
 	return "test \"" + tb.Name + "\" " + tb.Body.String()
+}
+
+type BenchmarkBlockStatement struct {
+	Token token.Token // токен BENCH
+	Name  string      // название бенчмарка
+	Body  *BlockStatement
+}
+
+func (bb *BenchmarkBlockStatement) statementNode()       {}
+func (bb *BenchmarkBlockStatement) TokenLiteral() string { return bb.Token.Literal }
+func (bb *BenchmarkBlockStatement) Pos() token.Pos       { return bb.Token.Pos }
+func (bb *BenchmarkBlockStatement) String() string {
+	return "bench \"" + bb.Name + "\" " + bb.Body.String()
 }
 
 type ImplBlockStatement struct {
