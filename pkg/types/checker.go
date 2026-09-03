@@ -158,6 +158,22 @@ func (c *Checker) Check(program *ast.Program) {
 				IsMut: false,
 				Pos:   s.Pos(),
 			})
+
+		case *ast.ExternBlockStatement:
+			for _, fn := range s.Functions {
+				params := make([]Type, len(fn.Parameters))
+				for i, p := range fn.Parameters {
+					params[i] = ParseType(p.Type, c.structRegistry, c.enumRegistry)
+				}
+				retType := ParseType(fn.ReturnType, c.structRegistry, c.enumRegistry)
+				fnType := &FunctionType{Params: params, ReturnType: retType}
+				c.scope.Insert(Symbol{
+					Name:  fn.Name.Value,
+					Type:  fnType,
+					IsMut: false,
+					Pos:   fn.Pos(),
+				})
+			}
 		}
 	}
 
@@ -199,6 +215,8 @@ func (c *Checker) checkStatement(stmt ast.Statement) {
 				Pos:   sym.Pos(),
 			})
 		}
+	case *ast.ExternBlockStatement:
+		// прототипы внешних функций проверены в первом проходе
 	case *ast.ImplBlockStatement:
 		st := c.structRegistry[s.Target.Value]
 		for _, m := range s.Methods {

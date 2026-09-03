@@ -261,6 +261,18 @@ func Eval(node ast.Node, env *Environment) Object {
 		env.Set(n.Name.Value, &EnumInstance{EnumName: n.Name.Value, Variant: ""})
 		return NULL
 
+	case *ast.ExternBlockStatement:
+		for _, fn := range n.Functions {
+			fnName := fn.Name.Value
+			builtin := &Builtin{
+				Fn: func(args ...Object) Object {
+					return callExternC(fnName, args)
+				},
+			}
+			env.Set(fnName, builtin)
+		}
+		return NULL
+
 	case *ast.AssertStatement:
 		cond := Eval(n.Condition, env)
 		if isError(cond) {
@@ -1335,4 +1347,73 @@ func evalImportStatement(stmt *ast.ImportStatement, env *Environment) Object {
 		}
 	}
 	return NULL
+}
+
+func callExternC(fnName string, args []Object) Object {
+	switch fnName {
+	case "sqrt":
+		if len(args) == 1 {
+			val := getFloatValue(args[0])
+			return &Float{Value: math.Sqrt(val)}
+		}
+	case "abs", "llabs", "fabs":
+		if len(args) == 1 {
+			if i, ok := args[0].(*Integer); ok {
+				if i.Value < 0 {
+					return &Integer{Value: -i.Value}
+				}
+				return i
+			}
+			val := getFloatValue(args[0])
+			return &Float{Value: math.Abs(val)}
+		}
+	case "puts":
+		if len(args) == 1 {
+			fmt.Println(args[0].Inspect())
+			return &Integer{Value: 0}
+		}
+	case "sin":
+		if len(args) == 1 {
+			return &Float{Value: math.Sin(getFloatValue(args[0]))}
+		}
+	case "cos":
+		if len(args) == 1 {
+			return &Float{Value: math.Cos(getFloatValue(args[0]))}
+		}
+	case "tan":
+		if len(args) == 1 {
+			return &Float{Value: math.Tan(getFloatValue(args[0]))}
+		}
+	case "pow":
+		if len(args) == 2 {
+			return &Float{Value: math.Pow(getFloatValue(args[0]), getFloatValue(args[1]))}
+		}
+	case "floor":
+		if len(args) == 1 {
+			return &Float{Value: math.Floor(getFloatValue(args[0]))}
+		}
+	case "ceil":
+		if len(args) == 1 {
+			return &Float{Value: math.Ceil(getFloatValue(args[0]))}
+		}
+	case "exit":
+		if len(args) == 1 {
+			if i, ok := args[0].(*Integer); ok {
+				os.Exit(int(i.Value))
+			}
+			os.Exit(0)
+		}
+	}
+	return NULL
+}
+
+func getFloatValue(obj Object) float64 {
+	switch v := obj.(type) {
+	case *Integer:
+		return float64(v.Value)
+	case *Float:
+		return v.Value
+	default:
+		return 0
+	}
 }

@@ -1,7 +1,8 @@
-# Necto Programming Language (v0.5.0-alpha)
+# Necto Programming Language (v0.7.0-alpha)
 
 **Necto** (от лат. *nectere / necto* — *«связывать воедино», «сплетать»*) — современный универсальный системный язык программирования, сплетающий воедино лучшие инженерные практики:
 - **Синтез лучших концепций**:
+  - **C Foreign Function Interface (FFI)** через блоки `extern "C"` (`extern "C" { fn sqrt(x: float) -> float }`).
   - Объектные методы и блоки **`impl`** с поддержкой `self` (`impl Lexer { fn next_char(mut self) { ... } }`).
   - Эргономичная и безопасная обработка ошибок через **`Result[T, E]`** (`Result.Ok`, `Result.Err`) и оператор распространения ошибок **`?`** (`let data = fs.read_file("file.nc")?`).
   - Алгебраические типы данных с полезной нагрузкой (**Tagged Enums**) и сопоставление с образцом (`match`), вдохновлённые Rust и Swift.
@@ -13,9 +14,13 @@
 - **Два режима выполнения**:
   - **Мгновенный интерпретатор** (`necto run script.nc`) для быстрой разработки, скриптинга и REPL.
   - **Native Compiler** (`necto build script.nc -o app.exe`) через Clang 17 / LLVM, компилирующий код в самостоятельные нативные исполняемые файлы `.exe`.
-- **Самохостинговый компилятор (Self-Hosting Stage 1)**:
+- **Самохостинговый компилятор и Bootstrap (Stage 1 & Stage 2)**:
   - Компилятор Necto полностью реализован на самом языке Necto в пакете [**`compiler/`**](compiler/)!
-  - `compiler/token.nc` $\rightarrow$ `compiler/lexer.nc` $\rightarrow$ `compiler/ast.nc` $\rightarrow$ `compiler/parser.nc` $\rightarrow$ `compiler/codegen.nc` $\rightarrow$ `compiler/main.nc`.
+  - Команда `necto bootstrap` автономно компилирует компилятор компилятором в нативный бинарник `bin/necto-native.exe`!
+- **Проектная система и инструменты**:
+  - `necto init [name]` — создание нового проекта с манифестом `necto.json`.
+  - `necto fmt` — автоматический форматировщик кода.
+  - Официальное расширение для VS Code в каталоге [**`editors/vscode/`**](editors/vscode/).
 
 - **Официальная документация:**
   - Полная спецификация языка: [**`SPECIFICATION.md`**](SPECIFICATION.md)
@@ -45,12 +50,19 @@ cd my_app
 .\bin\necto.exe fmt --check
 ```
 
-3. **Запуск сквозного пайплайна компилятора на чистом Necto:**
+3. **Запуск C FFI примера:**
 ```powershell
-.\bin\necto.exe run compiler/main.nc
+.\bin\necto.exe run examples/11_c_interop.nc
+.\bin\necto.exe build examples/11_c_interop.nc -o c_app.exe
 ```
 
-4. **Запуск встроенных юнит-тестов (`necto test`):**
+4. **Автономная сборка компилятора (`necto bootstrap`):**
+```powershell
+.\bin\necto.exe bootstrap
+.\bin\necto-native.exe
+```
+
+5. **Запуск встроенных юнит-тестов (`necto test`):**
 ```powershell
 .\bin\necto.exe test compiler/main.nc
 ```

@@ -302,6 +302,25 @@ func (ib *ImplBlockStatement) String() string {
 	return out.String()
 }
 
+type ExternBlockStatement struct {
+	Token     token.Token // токен EXTERN
+	ABI       string      // e.g. "C"
+	Functions []*FnDeclaration
+}
+
+func (eb *ExternBlockStatement) statementNode()       {}
+func (eb *ExternBlockStatement) TokenLiteral() string { return eb.Token.Literal }
+func (eb *ExternBlockStatement) Pos() token.Pos       { return eb.Token.Pos }
+func (eb *ExternBlockStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString("extern \"" + eb.ABI + "\" {\n")
+	for _, f := range eb.Functions {
+		out.WriteString("  " + f.String() + "\n")
+	}
+	out.WriteString("}")
+	return out.String()
+}
+
 type AssertStatement struct {
 	Token     token.Token // токен ASSERT
 	Condition Expression

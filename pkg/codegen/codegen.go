@@ -67,7 +67,24 @@ func (c *Compiler) CompileToC(program *ast.Program) (string, error) {
 		}
 	}
 
-	// Второй проход: предварительное объявление функций
+	// Второй проход: предварительное объявление функций и extern
+	for _, stmt := range program.Statements {
+		if eb, ok := stmt.(*ast.ExternBlockStatement); ok {
+			c.writeLine("// --- Extern " + eb.ABI + " Functions ---")
+			for _, fn := range eb.Functions {
+				// Стандартные функции из math.h / stdlib.h / stdio.h уже объявлены в заголовочных файлах
+				switch fn.Name.Value {
+				case "sqrt", "sin", "cos", "tan", "pow", "abs", "llabs", "puts", "printf", "malloc", "free", "exit", "floor", "ceil", "round", "fabs":
+					continue
+				default:
+					sig := c.generateFnSignature(fn)
+					c.writeLine("extern " + sig + ";")
+				}
+			}
+			c.writeLine("")
+		}
+	}
+
 	for _, stmt := range program.Statements {
 		if fd, ok := stmt.(*ast.FnDeclaration); ok {
 			if fd.Name.Value != "main" {

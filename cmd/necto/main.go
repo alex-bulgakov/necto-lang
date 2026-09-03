@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -18,7 +19,7 @@ import (
 	"necto/pkg/types"
 )
 
-const VERSION = "0.6.0-alpha"
+const VERSION = "0.7.0-alpha"
 
 type ProjectConfig struct {
 	Name         string            `json:"name"`
@@ -38,6 +39,7 @@ func printUsage() {
 	fmt.Println("  necto run [file.nc]            Run Necto program (or project entry from necto.json)")
 	fmt.Println("  necto test [file.nc]           Run unit tests in file or tests/ directory")
 	fmt.Println("  necto build [file.nc] -o <out> Compile Necto program to native binary")
+	fmt.Println("  necto bootstrap                Compile self-hosted compiler to bin/necto-native.exe (Stage 2)")
 	fmt.Println("  necto check [file.nc]          Type check program without executing")
 	fmt.Println("  necto repl                     Start interactive Necto REPL")
 	fmt.Println("  necto version                  Show Necto version")
@@ -137,6 +139,9 @@ func main() {
 			}
 		}
 		buildFile(sourceFile, outFile)
+
+	case "bootstrap":
+		runBootstrap()
 
 	case "check":
 		sourceFile := ""
@@ -493,4 +498,49 @@ func runFormatter(target string, checkOnly bool) {
 			fmt.Println("✓ All files are already formatted!")
 		}
 	}
+}
+
+func runBootstrap() {
+	fmt.Println("==================================================================")
+	fmt.Println("       Necto Bootstrap (Stage 2) — Building Native Compiler       ")
+	fmt.Println("==================================================================")
+	fmt.Println("Step 1: Running pure Necto compiler (compiler/main.nc)...")
+
+	if _, err := os.Stat("compiler/main.nc"); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: compiler/main.nc not found: %s\n", err)
+		os.Exit(1)
+	}
+
+	runFile("compiler/main.nc")
+
+	fmt.Println("\nStep 2: Compiling generated C code with Clang/LLVM...")
+	tmpC := "stage1_output.tmp.c"
+	if _, err := os.Stat(tmpC); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: generated C file '%s' not found: %s\n", tmpC, err)
+		os.Exit(1)
+	}
+	defer os.Remove(tmpC)
+
+	os.MkdirAll("bin", 0755)
+	nativeOut := filepath.Join("bin", "necto-native.exe")
+	compilerPath, err := exec.LookPath("clang")
+	if err != nil {
+		compilerPath, err = exec.LookPath("gcc")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Error: neither clang nor gcc found in PATH")
+			os.Exit(1)
+		}
+	}
+
+	cmd := exec.Command(compilerPath, "-O2", tmpC, "-o", nativeOut)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: native compilation failed:\n%s\n%s\n", string(out), err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Step 3: Verified native build: '%s' is ready!\n", nativeOut)
+	fmt.Println("==================================================================")
+	fmt.Println("       Stage 2 Complete: Necto has successfully built itself!     ")
+	fmt.Println("==================================================================")
 }

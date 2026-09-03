@@ -214,6 +214,8 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseStructDeclaration()
 	case token.IMPL:
 		return p.parseImplBlockStatement()
+	case token.EXTERN:
+		return p.parseExternBlockStatement()
 	case token.ENUM:
 		return p.parseEnumDeclaration()
 	case token.IMPORT:
@@ -512,6 +514,63 @@ func (p *Parser) parseImplBlockStatement() *ast.ImplBlockStatement {
 			fn := p.parseFnDeclaration()
 			if fn != nil {
 				stmt.Methods = append(stmt.Methods, fn)
+			}
+		} else {
+			p.nextToken()
+		}
+	}
+
+	if !p.expectPeek(token.RBRACE) {
+		return nil
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseExternFnSignature() *ast.FnDeclaration {
+	stmt := &ast.FnDeclaration{Token: p.curToken}
+
+	if !p.expectPeek(token.IDENT) {
+		return nil
+	}
+	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+
+	stmt.Parameters = p.parseFnParameters()
+
+	if p.peekTokenIs(token.ARROW) {
+		p.nextToken() // skip ->
+		stmt.ReturnType = p.parseTypeSignature()
+	}
+
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseExternBlockStatement() *ast.ExternBlockStatement {
+	stmt := &ast.ExternBlockStatement{Token: p.curToken, ABI: "C"}
+
+	if p.peekTokenIs(token.STRING) {
+		p.nextToken()
+		stmt.ABI = p.curToken.Literal
+	}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	for !p.peekTokenIs(token.RBRACE) && !p.peekTokenIs(token.EOF) {
+		if p.peekTokenIs(token.FN) {
+			p.nextToken()
+			fn := p.parseExternFnSignature()
+			if fn != nil {
+				stmt.Functions = append(stmt.Functions, fn)
 			}
 		} else {
 			p.nextToken()
