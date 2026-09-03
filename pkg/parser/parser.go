@@ -51,6 +51,7 @@ var precedences = map[token.TokenType]int{
 	token.LPAREN:       CALL,
 	token.LBRACKET:     INDEX,
 	token.DOT:          DOT,
+	token.QUESTION:     CALL,
 }
 
 type (
@@ -117,6 +118,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.LPAREN, p.parseCallExpression)
 	p.registerInfix(token.LBRACKET, p.parseIndexExpression)
 	p.registerInfix(token.DOT, p.parseDotExpression)
+	p.registerInfix(token.QUESTION, p.parseTryExpression)
 
 	// Читаем два первых токена для инициализации curToken и peekToken
 	p.nextToken()
@@ -210,6 +212,8 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseFnDeclaration()
 	case token.STRUCT:
 		return p.parseStructDeclaration()
+	case token.IMPL:
+		return p.parseImplBlockStatement()
 	case token.ENUM:
 		return p.parseEnumDeclaration()
 	case token.IMPORT:
@@ -327,6 +331,17 @@ func (p *Parser) parseFnDeclaration() *ast.FnDeclaration {
 	}
 	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 
+	// Опциональные generic параметры: fn foo[T, U](...)
+	if p.peekTokenIs(token.LBRACKET) {
+		p.nextToken() // [
+		for !p.peekTokenIs(token.RBRACKET) && !p.peekTokenIs(token.EOF) {
+			p.nextToken()
+		}
+		if !p.expectPeek(token.RBRACKET) {
+			return nil
+		}
+	}
+
 	if !p.expectPeek(token.LPAREN) {
 		return nil
 	}
@@ -357,8 +372,15 @@ func (p *Parser) parseFnParameters() []*ast.Parameter {
 
 	p.nextToken()
 
+	isMut := false
+	if p.curTokenIs(token.MUT) {
+		isMut = true
+		p.nextToken()
+	}
+
 	param := &ast.Parameter{
-		Name: &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal},
+		Name:  &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal},
+		IsMut: isMut,
 	}
 	if p.peekTokenIs(token.COLON) {
 		p.nextToken()
@@ -369,8 +391,14 @@ func (p *Parser) parseFnParameters() []*ast.Parameter {
 	for p.peekTokenIs(token.COMMA) {
 		p.nextToken()
 		p.nextToken()
+		pMut := false
+		if p.curTokenIs(token.MUT) {
+			pMut = true
+			p.nextToken()
+		}
 		pParam := &ast.Parameter{
-			Name: &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal},
+			Name:  &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal},
+			IsMut: pMut,
 		}
 		if p.peekTokenIs(token.COLON) {
 			p.nextToken()
@@ -426,6 +454,17 @@ func (p *Parser) parseStructDeclaration() *ast.StructDeclaration {
 	}
 	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 
+	// Опциональные generic параметры: struct Stack[T]
+	if p.peekTokenIs(token.LBRACKET) {
+		p.nextToken() // [
+		for !p.peekTokenIs(token.RBRACKET) && !p.peekTokenIs(token.EOF) {
+			p.nextToken()
+		}
+		if !p.expectPeek(token.RBRACKET) {
+			return nil
+		}
+	}
+
 	if !p.expectPeek(token.LBRACE) {
 		return nil
 	}
@@ -446,6 +485,37 @@ func (p *Parser) parseStructDeclaration() *ast.StructDeclaration {
 			Name: fieldName,
 			Type: fieldType,
 		})
+	}
+
+	if !p.expectPeek(token.RBRACE) {
+		return nil
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseImplBlockStatement() *ast.ImplBlockStatement {
+	stmt := &ast.ImplBlockStatement{Token: p.curToken}
+
+	if !p.expectPeek(token.IDENT) {
+		return nil
+	}
+	stmt.Target = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	for !p.peekTokenIs(token.RBRACE) && !p.peekTokenIs(token.EOF) {
+		if p.peekTokenIs(token.FN) {
+			p.nextToken()
+			fn := p.parseFnDeclaration()
+			if fn != nil {
+				stmt.Methods = append(stmt.Methods, fn)
+			}
+		} else {
+			p.nextToken()
+		}
 	}
 
 	if !p.expectPeek(token.RBRACE) {
@@ -1050,4 +1120,8 @@ func (p *Parser) parseDotExpression(left ast.Expression) ast.Expression {
 
 	exp.Right = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 	return exp
+}
+
+func (p *Parser) parseTryExpression(left ast.Expression) ast.Expression {
+	return &ast.TryExpression{Token: p.curToken, Right: left}
 }

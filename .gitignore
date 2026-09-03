@@ -11,6 +11,7 @@ bin/
 *.tmp.c
 *.necto.tmp.c
 *.aura.tmp.c
+generated_*.c
 
 # Test and run outputs
 sample_data.txt

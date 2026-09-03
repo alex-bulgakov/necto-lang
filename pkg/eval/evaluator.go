@@ -86,9 +86,50 @@ var modules = map[string]*Module{
 			},
 		},
 	},
+	"Result": {
+		Name: "Result",
+		Methods: map[string]*Builtin{
+			"Ok": {
+				Fn: func(args ...Object) Object {
+					var val Object = NULL
+					if len(args) > 0 {
+						val = args[0]
+					}
+					return &ResultInstance{IsErr: false, Value: val}
+				},
+			},
+			"Err": {
+				Fn: func(args ...Object) Object {
+					var val Object = NULL
+					if len(args) > 0 {
+						val = args[0]
+					}
+					return &ResultInstance{IsErr: true, Value: val}
+				},
+			},
+		},
+	},
 }
 
 var builtins = map[string]*Builtin{
+	"Ok": {
+		Fn: func(args ...Object) Object {
+			var val Object = NULL
+			if len(args) > 0 {
+				val = args[0]
+			}
+			return &ResultInstance{IsErr: false, Value: val}
+		},
+	},
+	"Err": {
+		Fn: func(args ...Object) Object {
+			var val Object = NULL
+			if len(args) > 0 {
+				val = args[0]
+			}
+			return &ResultInstance{IsErr: true, Value: val}
+		},
+	},
 	"assert": {
 		Fn: func(args ...Object) Object {
 			if len(args) < 1 {
@@ -174,7 +215,7 @@ func Eval(node ast.Node, env *Environment) Object {
 		var val Object = NULL
 		if n.Value != nil {
 			val = Eval(n.Value, env)
-			if isError(val) {
+			if isError(val) || (val != nil && val.Type() == RETURN_VALUE_OBJ) {
 				return val
 			}
 		}
@@ -191,7 +232,29 @@ func Eval(node ast.Node, env *Environment) Object {
 		return NULL
 
 	case *ast.StructDeclaration:
-		// В рантайме объявление структуры сохраняется как мета-информация
+		def := &StructDefinition{Name: n.Name.Value, Methods: make(map[string]*Function)}
+		env.Set(n.Name.Value, def)
+		return NULL
+
+	case *ast.ImplBlockStatement:
+		var def *StructDefinition
+		if obj, exists := env.Get(n.Target.Value); exists {
+			if d, ok := obj.(*StructDefinition); ok {
+				def = d
+			}
+		}
+		if def == nil {
+			def = &StructDefinition{Name: n.Target.Value, Methods: make(map[string]*Function)}
+			env.Set(n.Target.Value, def)
+		}
+		for _, m := range n.Methods {
+			fn := &Function{
+				Parameters: m.Parameters,
+				Body:       m.Body,
+				Env:        env,
+			}
+			def.Methods[m.Name.Value] = fn
+		}
 		return NULL
 
 	case *ast.EnumDeclaration:
@@ -324,6 +387,14 @@ func Eval(node ast.Node, env *Environment) Object {
 				}
 				return newError("module '%s' has no method '%s'", ident.Value, n.Right.Value)
 			}
+			// Проверяем статические методы структуры: StructName.new(...)
+			if obj, exists := env.Get(ident.Value); exists {
+				if def, ok := obj.(*StructDefinition); ok {
+					if method, ok := def.Methods[n.Right.Value]; ok {
+						return method
+					}
+				}
+			}
 			if _, inEnv := env.Get(ident.Value); !inEnv {
 				return &EnumInstance{
 					EnumName: ident.Value,
@@ -337,7 +408,26 @@ func Eval(node ast.Node, env *Environment) Object {
 		if isError(left) {
 			return left
 		}
-		return evalDotExpression(left, n.Right.Value)
+		return evalDotExpression(left, n.Right.Value, env)
+
+	case *ast.TryExpression:
+		res := Eval(n.Right, env)
+		if isError(res) {
+			return res
+		}
+		if r, ok := res.(*ResultInstance); ok {
+			if r.IsErr {
+				return &ReturnValue{Value: r}
+			}
+			return r.Value
+		}
+		if opt, ok := res.(*Option); ok {
+			if !opt.HasValue {
+				return &ReturnValue{Value: NONE}
+			}
+			return opt.Value
+		}
+		return res
 
 	case *ast.StructLiteral:
 		fields := make(map[string]Object)
@@ -529,6 +619,13 @@ func evalMinusPrefixOperatorExpression(right Object) Object {
 }
 
 func evalInfixExpression(operator string, left, right Object) Object {
+	if left.Type() == RETURN_VALUE_OBJ {
+		left = left.(*ReturnValue).Value
+	}
+	if right.Type() == RETURN_VALUE_OBJ {
+		right = right.(*ReturnValue).Value
+	}
+
 	if left.Type() == INTEGER_OBJ && right.Type() == INTEGER_OBJ {
 		return evalIntegerInfixExpression(operator, left, right)
 	}
@@ -765,8 +862,16 @@ func matchesPattern(pat ast.Expression, val Object, scope *Environment) bool {
 		if boxVal, ok := target.(*BoxInstance); ok {
 			target = boxVal.Value
 		}
-		// Pattern: Enum.Variant(a, b)
+		// Pattern: Result.Ok(val) / Result.Err(err)
 		if dot, ok := p.Function.(*ast.DotExpression); ok {
+			if resVal, ok := target.(*ResultInstance); ok {
+				if dot.Right.Value == "Ok" && !resVal.IsErr && len(p.Arguments) == 1 {
+					return matchesPattern(p.Arguments[0], resVal.Value, scope)
+				}
+				if dot.Right.Value == "Err" && resVal.IsErr && len(p.Arguments) == 1 {
+					return matchesPattern(p.Arguments[0], resVal.Value, scope)
+				}
+			}
 			if enumVal, ok := target.(*EnumInstance); ok {
 				if enumVal.Variant == dot.Right.Value && len(enumVal.Fields) == len(p.Arguments) {
 					for i, argPat := range p.Arguments {
@@ -775,6 +880,16 @@ func matchesPattern(pat ast.Expression, val Object, scope *Environment) bool {
 						}
 					}
 					return true
+				}
+			}
+		}
+		if ident, ok := p.Function.(*ast.Identifier); ok {
+			if resVal, ok := target.(*ResultInstance); ok {
+				if ident.Value == "Ok" && !resVal.IsErr && len(p.Arguments) == 1 {
+					return matchesPattern(p.Arguments[0], resVal.Value, scope)
+				}
+				if ident.Value == "Err" && resVal.IsErr && len(p.Arguments) == 1 {
+					return matchesPattern(p.Arguments[0], resVal.Value, scope)
 				}
 			}
 		}
@@ -844,7 +959,7 @@ func evalIndexExpression(left, index Object) Object {
 	}
 }
 
-func evalDotExpression(left Object, prop string) Object {
+func evalDotExpression(left Object, prop string, env ...*Environment) Object {
 	switch obj := left.(type) {
 	case *BoxInstance:
 		if prop == "unwrap" {
@@ -854,13 +969,34 @@ func evalDotExpression(left Object, prop string) Object {
 				},
 			}
 		}
-		return evalDotExpression(obj.Value, prop)
+		return evalDotExpression(obj.Value, prop, env...)
 
 	case *StructInstance:
 		if val, exists := obj.Fields[prop]; exists {
 			return val
 		}
-		return newError("field '%s' not found on struct '%s'", prop, obj.Name)
+		if len(env) > 0 && env[0] != nil {
+			if defObj, exists := env[0].Get(obj.Name); exists {
+				if def, ok := defObj.(*StructDefinition); ok {
+					if method, ok := def.Methods[prop]; ok {
+						return &Builtin{
+							Fn: func(args ...Object) Object {
+								callArgs := append([]Object{obj}, args...)
+								return applyFunction(method, callArgs)
+							},
+						}
+					}
+				}
+			}
+		}
+		if prop == "unwrap" {
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					return left
+				},
+			}
+		}
+		return newError("field or method '%s' not found on struct '%s'", prop, obj.Name)
 
 	case *Module:
 		if method, exists := obj.Methods[prop]; exists {

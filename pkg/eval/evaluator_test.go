@@ -178,3 +178,60 @@ finalVal
 	evaluated := testEval(input)
 	testIntegerObject(t, evaluated, 184)
 }
+
+func TestEvalImplMethodsAndResult(t *testing.T) {
+	input := `
+struct Counter {
+    count: int
+}
+
+impl Counter {
+    fn new(start: int) -> Counter {
+        return Counter { count: start }
+    }
+
+    fn inc(mut self, step: int) -> int {
+        self.count = self.count + step
+        return self.count
+    }
+
+    fn get_count(self) -> int {
+        return self.count
+    }
+}
+
+let mut c = Counter.new(10)
+c.inc(5)
+c.inc(15)
+
+fn try_division(a: int, b: int) -> Result[int, str] {
+    if b == 0 {
+        return Result.Err("cannot divide by zero")
+    }
+    return Result.Ok(a / b)
+}
+
+fn compute(x: int, y: int) -> Result[int, str] {
+    let div = try_division(x, y)?
+    return Result.Ok(div + 100)
+}
+
+let ok_res = compute(30, 2)
+let mut val = 0
+match ok_res {
+    Result.Ok(v) => val = v,
+    Result.Err(e) => val = -1,
+}
+
+let err_res = compute(30, 0)
+let mut err_val = 0
+match err_res {
+    Result.Ok(v) => err_val = 999,
+    Result.Err(e) => err_val = 404,
+}
+
+c.get_count() + val + err_val
+`
+	evaluated := testEval(input)
+	testIntegerObject(t, evaluated, 549)
+}

@@ -170,8 +170,9 @@ func (fs *ForInStatement) String() string {
 }
 
 type Parameter struct {
-	Name *Identifier
-	Type string
+	Name  *Identifier
+	Type  string
+	IsMut bool
 }
 
 type FnDeclaration struct {
@@ -280,6 +281,25 @@ func (tb *TestBlockStatement) TokenLiteral() string { return tb.Token.Literal }
 func (tb *TestBlockStatement) Pos() token.Pos       { return tb.Token.Pos }
 func (tb *TestBlockStatement) String() string {
 	return "test \"" + tb.Name + "\" " + tb.Body.String()
+}
+
+type ImplBlockStatement struct {
+	Token   token.Token // токен IMPL
+	Target  *Identifier
+	Methods []*FnDeclaration
+}
+
+func (ib *ImplBlockStatement) statementNode()       {}
+func (ib *ImplBlockStatement) TokenLiteral() string { return ib.Token.Literal }
+func (ib *ImplBlockStatement) Pos() token.Pos       { return ib.Token.Pos }
+func (ib *ImplBlockStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString("impl " + ib.Target.String() + " {\n")
+	for _, m := range ib.Methods {
+		out.WriteString("  " + m.String() + "\n")
+	}
+	out.WriteString("}")
+	return out.String()
 }
 
 type AssertStatement struct {
@@ -601,3 +621,13 @@ func (ece *EnumConstructorExpr) String() string {
 	}
 	return out.String()
 }
+
+type TryExpression struct {
+	Token token.Token // токен ?
+	Right Expression  // внутреннее выражение, e.g. read_file(path)?
+}
+
+func (te *TryExpression) expressionNode()      {}
+func (te *TryExpression) TokenLiteral() string { return te.Token.Literal }
+func (te *TryExpression) Pos() token.Pos       { return te.Token.Pos }
+func (te *TryExpression) String() string       { return te.Right.String() + "?" }

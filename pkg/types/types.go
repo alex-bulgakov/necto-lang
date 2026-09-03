@@ -95,6 +95,7 @@ type StructField struct {
 type StructType struct {
 	NameStr string
 	Fields  map[string]Type
+	Methods map[string]*FunctionType
 }
 
 func (s *StructType) Name() string { return s.NameStr }
@@ -104,6 +105,28 @@ func (s *StructType) Equals(other Type) bool {
 	}
 	if st, ok := other.(*StructType); ok {
 		return s.NameStr == st.NameStr
+	}
+	return false
+}
+
+type ResultType struct {
+	OkType  Type
+	ErrType Type
+}
+
+func (r *ResultType) Name() string {
+	return fmt.Sprintf("Result[%s, %s]", r.OkType.Name(), r.ErrType.Name())
+}
+
+func (r *ResultType) Equals(other Type) bool {
+	if other == Any {
+		return true
+	}
+	if et, ok := other.(*EnumType); ok && et.NameStr == "Result" {
+		return true
+	}
+	if rt, ok := other.(*ResultType); ok {
+		return r.OkType.Equals(rt.OkType) && r.ErrType.Equals(rt.ErrType)
 	}
 	return false
 }
@@ -163,6 +186,9 @@ func (e *EnumType) Equals(other Type) bool {
 	if other == Any {
 		return true
 	}
+	if _, ok := other.(*ResultType); ok && e.NameStr == "Result" {
+		return true
+	}
 	if et, ok := other.(*EnumType); ok {
 		return e.NameStr == et.NameStr
 	}
@@ -209,10 +235,24 @@ func ParseType(name string, structRegistry map[string]*StructType, enumRegistry 
 			innerName := name[7 : len(name)-1]
 			return &OptionType{Inner: ParseType(innerName, structRegistry, enums)}
 		}
+		// Проверка Result[T, E]
+		if len(name) > 8 && name[:7] == "Result[" && name[len(name)-1] == ']' {
+			inner := name[7 : len(name)-1]
+			parts := strings.SplitN(inner, ",", 2)
+			if len(parts) == 2 {
+				okT := ParseType(strings.TrimSpace(parts[0]), structRegistry, enums)
+				errT := ParseType(strings.TrimSpace(parts[1]), structRegistry, enums)
+				return &ResultType{OkType: okT, ErrType: errT}
+			}
+		}
 		// Проверка [T]
 		if len(name) > 2 && name[0] == '[' && name[len(name)-1] == ']' {
 			innerName := name[1 : len(name)-1]
 			return &ArrayType{Element: ParseType(innerName, structRegistry, enums)}
+		}
+		// Одиночные заглавные буквы (e.g. T, U, E, K, V) как generic типы
+		if len(name) == 1 && name[0] >= 'A' && name[0] <= 'Z' {
+			return Any
 		}
 		if st, ok := structRegistry[name]; ok {
 			return st

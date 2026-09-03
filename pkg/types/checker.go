@@ -72,11 +72,20 @@ func NewChecker() *Checker {
 		IsMut: false,
 	})
 
+	enumRegistry := make(map[string]*EnumType)
+	enumRegistry["Result"] = &EnumType{
+		NameStr: "Result",
+		Variants: map[string][]Type{
+			"Ok":  []Type{Any},
+			"Err": []Type{Any},
+		},
+	}
+
 	return &Checker{
 		errors:         []string{},
 		scope:          rootScope,
 		structRegistry: make(map[string]*StructType),
-		enumRegistry:   make(map[string]*EnumType),
+		enumRegistry:   enumRegistry,
 	}
 }
 
@@ -90,7 +99,7 @@ func (c *Checker) errorf(pos token.Pos, format string, args ...interface{}) {
 }
 
 func (c *Checker) Check(program *ast.Program) {
-	// Первый проход: сбор объявлений структур и сигнатур функций
+	// Первый проход: сбор объявлений структур, enums, impl и сигнатур функций
 	for _, stmt := range program.Statements {
 		switch s := stmt.(type) {
 		case *ast.EnumDeclaration:
@@ -110,8 +119,31 @@ func (c *Checker) Check(program *ast.Program) {
 			for _, f := range s.Fields {
 				fields[f.Name.Value] = ParseType(f.Type, c.structRegistry, c.enumRegistry)
 			}
-			st := &StructType{NameStr: s.Name.Value, Fields: fields}
+			st := &StructType{NameStr: s.Name.Value, Fields: fields, Methods: make(map[string]*FunctionType)}
 			c.structRegistry[s.Name.Value] = st
+
+		case *ast.ImplBlockStatement:
+			st, ok := c.structRegistry[s.Target.Value]
+			if !ok {
+				c.errorf(s.Pos(), "cannot implement methods for undefined struct '%s'", s.Target.Value)
+				continue
+			}
+			if st.Methods == nil {
+				st.Methods = make(map[string]*FunctionType)
+			}
+			for _, m := range s.Methods {
+				params := make([]Type, len(m.Parameters))
+				for i, p := range m.Parameters {
+					if p.Name.Value == "self" {
+						params[i] = st
+					} else {
+						params[i] = ParseType(p.Type, c.structRegistry, c.enumRegistry)
+					}
+				}
+				retType := ParseType(m.ReturnType, c.structRegistry, c.enumRegistry)
+				fnType := &FunctionType{Params: params, ReturnType: retType}
+				st.Methods[m.Name.Value] = fnType
+			}
 
 		case *ast.FnDeclaration:
 			params := make([]Type, len(s.Parameters))
@@ -166,6 +198,11 @@ func (c *Checker) checkStatement(stmt ast.Statement) {
 				IsMut: false,
 				Pos:   sym.Pos(),
 			})
+		}
+	case *ast.ImplBlockStatement:
+		st := c.structRegistry[s.Target.Value]
+		for _, m := range s.Methods {
+			c.checkMethodBody(m, st)
 		}
 	case *ast.EnumDeclaration, *ast.StructDeclaration, *ast.BreakStatement, *ast.ContinueStatement:
 		// уже зарегистрировано или тривиально
@@ -272,6 +309,42 @@ func (c *Checker) checkFnBody(s *ast.FnDeclaration) {
 			Name:  param.Name.Value,
 			Type:  pType,
 			IsMut: false,
+			Pos:   param.Name.Pos(),
+		})
+	}
+
+	for _, stmt := range s.Body.Statements {
+		c.checkStatement(stmt)
+	}
+}
+
+func (c *Checker) checkMethodBody(s *ast.FnDeclaration, st *StructType) {
+	retType := ParseType(s.ReturnType, c.structRegistry, c.enumRegistry)
+	prevRet := c.currentFnRet
+	c.currentFnRet = retType
+	defer func() { c.currentFnRet = prevRet }()
+
+	prevScope := c.scope
+	c.scope = NewScope(prevScope)
+	defer func() { c.scope = prevScope }()
+
+	for _, param := range s.Parameters {
+		var pType Type
+		isMut := false
+		if param.Name.Value == "self" {
+			if st != nil {
+				pType = st
+			} else {
+				pType = Any
+			}
+			isMut = true
+		} else {
+			pType = ParseType(param.Type, c.structRegistry, c.enumRegistry)
+		}
+		c.scope.Insert(Symbol{
+			Name:  param.Name.Value,
+			Type:  pType,
+			IsMut: isMut,
 			Pos:   param.Name.Pos(),
 		})
 	}
@@ -439,6 +512,13 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 				}
 			}
 
+			// Статические методы структуры: StructName.new(...)
+			if st, exists := c.structRegistry[ident.Value]; exists {
+				if mType, ok := st.Methods[e.Right.Value]; ok {
+					return mType
+				}
+			}
+
 			// Проверяем конструкторы вариантов Enum: EnumName.Variant
 			if et, exists := c.enumRegistry[ident.Value]; exists {
 				if paramTypes, vExists := et.Variants[e.Right.Value]; vExists {
@@ -462,7 +542,13 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 			if fType, exists := st.Fields[e.Right.Value]; exists {
 				return fType
 			}
-			c.errorf(e.Pos(), "field '%s' does not exist on struct '%s'", e.Right.Value, st.NameStr)
+			if mType, exists := st.Methods[e.Right.Value]; exists {
+				if len(mType.Params) > 0 && mType.Params[0].Equals(st) {
+					return &FunctionType{Params: mType.Params[1:], ReturnType: mType.ReturnType}
+				}
+				return mType
+			}
+			c.errorf(e.Pos(), "field or method '%s' does not exist on struct '%s'", e.Right.Value, st.NameStr)
 			return Any
 		}
 
@@ -571,6 +657,16 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 				c.checkExpression(arg)
 			}
 			return et
+		}
+		return Any
+
+	case *ast.TryExpression:
+		rightT := c.checkExpression(e.Right)
+		if rt, ok := rightT.(*ResultType); ok {
+			return rt.OkType
+		}
+		if opt, ok := rightT.(*OptionType); ok {
+			return opt.Inner
 		}
 		return Any
 	}

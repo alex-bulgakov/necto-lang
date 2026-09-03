@@ -30,6 +30,8 @@ const (
 	MODULE_OBJ      = "MODULE"
 	BOX_OBJ         = "BOX"
 	ENUM_OBJ        = "ENUM"
+	RESULT_OBJ      = "RESULT"
+	STRUCT_DEF_OBJ  = "STRUCT_DEF"
 )
 
 type Object interface {
@@ -217,3 +219,24 @@ func (e *EnumInstance) Inspect() string {
 	}
 	return out.String()
 }
+
+type ResultInstance struct {
+	IsErr bool
+	Value Object
+}
+
+func (r *ResultInstance) Type() ObjectType { return RESULT_OBJ }
+func (r *ResultInstance) Inspect() string {
+	if r.IsErr {
+		return fmt.Sprintf("Result.Err(%s)", r.Value.Inspect())
+	}
+	return fmt.Sprintf("Result.Ok(%s)", r.Value.Inspect())
+}
+
+type StructDefinition struct {
+	Name    string
+	Methods map[string]*Function
+}
+
+func (s *StructDefinition) Type() ObjectType { return STRUCT_DEF_OBJ }
+func (s *StructDefinition) Inspect() string  { return "struct " + s.Name }

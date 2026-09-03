@@ -1,7 +1,9 @@
-# Necto Programming Language (v0.3.0-alpha)
+# Necto Programming Language (v0.4.0-alpha)
 
 **Necto** (от лат. *nectere / necto* — *«связывать воедино», «сплетать»*) — современный универсальный системный язык программирования, сплетающий воедино лучшие инженерные практики:
 - **Синтез лучших концепций**:
+  - Объектные методы и блоки **`impl`** с поддержкой `self` (`impl Lexer { fn next_char(mut self) { ... } }`).
+  - Эргономичная и безопасная обработка ошибок через **`Result[T, E]`** (`Result.Ok`, `Result.Err`) и оператор распространения ошибок **`?`** (`let data = fs.read_file("file.nc")?`).
   - Алгебраические типы данных с полезной нагрузкой (**Tagged Enums**) и сопоставление с образцом (`match`), вдохновлённые Rust и Swift.
   - Умные указатели **`Box[T]`** для рекурсивных структур данных (деревья синтаксиса, графы, списки).
   - Простота, встроенные коллекции, многофайловые модули и системный I/O (`[T]`, `Map[K, V]`, `import`, `fs`, `os`), вдохновлённые Go и Python.
@@ -11,9 +13,10 @@
 - **Два режима выполнения**:
   - **Мгновенный интерпретатор** (`necto run script.nc`) для быстрой разработки, скриптинга и REPL.
   - **Native Compiler** (`necto build script.nc -o app.exe`) через Clang 17 / LLVM, компилирующий код в самостоятельные нативные исполняемые файлы `.exe`.
-- **Путь к самохостингу (Self-Hosting)**:
+- **Путь к полному самохостингу (Self-Hosting)**:
   - Компонент 1: Лексер языка Necto на чистом Necto ([`examples/07_mini_lexer.nc`](file:///d:/Projects/newLanguage/examples/07_mini_lexer.nc)).
-  - Компонент 2: **Синтаксический AST-парсер и вычислитель дерева выражений на чистом Necto** ([`examples/08_mini_parser.nc`](file:///d:/Projects/newLanguage/examples/08_mini_parser.nc))!
+  - Компонент 2: Синтаксический AST-парсер на чистом Necto ([`examples/08_mini_parser.nc`](file:///d:/Projects/newLanguage/examples/08_mini_parser.nc)).
+  - Компонент 3: **Сквозной пайплайн компилятора на чистом Necto (Lexer $\rightarrow$ Parser $\rightarrow$ Codegen)** ([`examples/10_self_compiler_pipeline.nc`](file:///d:/Projects/newLanguage/examples/10_self_compiler_pipeline.nc))!
 
 ---
 
@@ -26,55 +29,73 @@ go build -o bin/necto.exe ./cmd/necto
 
 ### Команды CLI Necto
 
-1. **Запуск программы напрямую через интерпретатор:**
+1. **Запуск сквозного пайплайна компилятора на чистом Necto:**
 ```powershell
-.\bin\necto.exe run examples/08_mini_parser.nc
+.\bin\necto.exe run examples/10_self_compiler_pipeline.nc
 ```
 
 2. **Запуск встроенных юнит-тестов (`necto test`):**
 ```powershell
-.\bin\necto.exe test examples/09_modules_and_tests.nc
+.\bin\necto.exe test examples/10_self_compiler_pipeline.nc
 ```
 
-3. **Работа с файлами и системным I/O:**
-```powershell
-.\bin\necto.exe run examples/05_file_io.nc
-```
-
-4. **Коллекции (динамические массивы и Map):**
-```powershell
-.\bin\necto.exe run examples/06_collections.nc
-```
-
-5. **Компиляция в нативный бинарный файл (`.exe`) через Clang/LLVM:**
+3. **Компиляция Necto-файла в нативный исполняемый файл `.exe` через Clang/LLVM:**
 ```powershell
 .\bin\necto.exe build examples/02_fibonacci.nc -o fib.exe
 .\fib.exe
 ```
 
-6. **Статическая проверка типов (Type Check):**
+4. **Статическая проверка типов (Type Check):**
 ```powershell
-.\bin\necto.exe check examples/08_mini_parser.nc
+.\bin\necto.exe check examples/10_self_compiler_pipeline.nc
 ```
 
-7. **Интерактивная консоль (REPL):**
+5. **Интерактивная консоль (REPL):**
 ```powershell
 .\bin\necto.exe repl
-necto> let b = Box.new(42)
-necto> b.unwrap()
-42
 ```
 
 ---
 
-## 📖 Новые возможности Necto (v0.3.0)
+## 📖 Новые возможности Necto (v0.4.0)
 
-### 1. Tagged Enums (Алгебраические типы данных)
+### 1. Методы структур (`impl` блоки)
+```necto
+struct Lexer {
+    source: str
+    cursor: int
+}
+
+impl Lexer {
+    fn new(src: str) -> Lexer {
+        return Lexer { source: src, cursor: 0 }
+    }
+
+    fn next_char(mut self) -> int {
+        let c = self.source.char_at(self.cursor)
+        self.cursor += 1
+        return c
+    }
+}
+
+let mut lex = Lexer.new("fn main() {}")
+let c = lex.next_char()
+```
+
+### 2. Тип `Result[T, E]` и оператор распространения ошибок `?`
+```necto
+fn compile_source(path: str) -> Result[str, str] {
+    let source = fs.read_file(path)?  // При ошибке функция немедленно вернет Result.Err
+    let tokens = tokenize(source)?
+    return Result.Ok("Compilation successful")
+}
+```
+
+### 3. Tagged Enums и сопоставление с образцом
 ```necto
 enum Token {
     Number(int)
     Ident(str)
-    Plus
     Eof
 }
 
@@ -82,42 +103,16 @@ let tok = Token.Number(42)
 
 match tok {
     Token.Number(val) => println(f"Number: {val}"),
-    Token.Ident(name) => println(f"Identifier: {name}"),
-    Token.Plus        => println("Plus operator"),
-    Token.Eof         => println("End of file"),
+    Token.Ident(name) => println(f"Ident: {name}"),
+    Token.Eof         => println("EOF"),
 }
 ```
 
-### 2. Умный указатель `Box[T]` для рекурсивных структур (AST)
+### 4. Умный указатель `Box[T]` для рекурсивных структур данных
 ```necto
 enum Expr {
-    Number(int)
+    Num(int)
     Binary(op: str, left: Box[Expr], right: Box[Expr])
-}
-
-// Построение дерева: 2 + (3 * 4)
-let mul = Expr.Binary("*", Box.new(Expr.Number(3)), Box.new(Expr.Number(4)))
-let root = Expr.Binary("+", Box.new(Expr.Number(2)), Box.new(mul))
-```
-
-### 3. Модульная система (`import`)
-```necto
-// math_utils.nc
-fn add(a: int, b: int) -> int { return a + b }
-
-// main.nc
-import { add } from "examples/math_utils.nc"
-
-fn main() {
-    println(f"Result: {add(10, 20)}")
-}
-```
-
-### 4. Встроенное тестирование (`test` и `assert`)
-```necto
-test "addition works" {
-    assert(2 + 2 == 4)
-    assert(10 > 5)
 }
 ```
 
@@ -133,13 +128,14 @@ test "addition works" {
 | [`04_option_safety.nc`](file:///d:/Projects/newLanguage/examples/04_option_safety.nc) | Безопасность `Option[T]` без `null` |
 | [`05_file_io.nc`](file:///d:/Projects/newLanguage/examples/05_file_io.nc) | Системный файловый I/O (`fs.read_file`, `fs.write_file`) |
 | [`06_collections.nc`](file:///d:/Projects/newLanguage/examples/06_collections.nc) | Динамические списки `[T]`, `Map[K, V]` и срезы строк |
-| [`07_mini_lexer.nc`](file:///d:/Projects/newLanguage/examples/07_mini_lexer.nc) | Лексер языка Necto, написанный на 100% чистом Necto |
-| [`08_mini_parser.nc`](file:///d:/Projects/newLanguage/examples/08_mini_parser.nc) | **AST-парсер и вычислитель деревьев на чистом Necto** |
-| [`09_modules_and_tests.nc`](file:///d:/Projects/newLanguage/examples/09_modules_and_tests.nc) | **Многофайловый `import` и запуск встроенных `test`** |
+| [`07_mini_lexer.nc`](file:///d:/Projects/newLanguage/examples/07_mini_lexer.nc) | Лексер языка Necto на чистом Necto |
+| [`08_mini_parser.nc`](file:///d:/Projects/newLanguage/examples/08_mini_parser.nc) | AST-парсер и вычислитель деревьев на чистом Necto |
+| [`09_modules_and_tests.nc`](file:///d:/Projects/newLanguage/examples/09_modules_and_tests.nc) | Многофайловый `import` и запуск юнит-тестов (`necto test`) |
+| [`10_self_compiler_pipeline.nc`](file:///d:/Projects/newLanguage/examples/10_self_compiler_pipeline.nc) | **Сквозной компилятор: методы (impl), Result, оператор ?, Codegen** |
 
 ---
 
-## 🧪 Запуск всех тестов компилятора
+## 🧪 Запуск полного набора тестов компилятора
 ```powershell
 go test -v ./...
 ```

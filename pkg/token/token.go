@@ -93,6 +93,7 @@ const (
 	TEST     = "TEST"
 	ASSERT   = "ASSERT"
 	FROM     = "FROM"
+	IMPL     = "IMPL"
 )
 
 var keywords = map[string]TokenType{
@@ -122,6 +123,7 @@ var keywords = map[string]TokenType{
 	"test":     TEST,
 	"assert":   ASSERT,
 	"from":     FROM,
+	"impl":     IMPL,
 }
 
 func LookupIdent(ident string) TokenType {
