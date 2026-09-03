@@ -147,3 +147,34 @@ func testIntegerObject(t *testing.T, obj Object, expected int64) bool {
 	}
 	return true
 }
+
+func TestEvalEnumsAndBox(t *testing.T) {
+	input := `
+enum Token {
+    Number(int)
+    Ident(str)
+    Eof
+}
+
+let t1 = Token.Number(42)
+let t2 = Token.Eof
+
+let res1 = match t1 {
+    Token.Number(val) => val * 2,
+    Token.Ident(name) => 0,
+    Token.Eof => -1,
+}
+
+let res2 = match t2 {
+    Token.Number(val) => 0,
+    Token.Eof => 100,
+    _ => 0,
+}
+
+let b = Box.new(res1 + res2)
+let finalVal = b.unwrap()
+finalVal
+`
+	evaluated := testEval(input)
+	testIntegerObject(t, evaluated, 184)
+}

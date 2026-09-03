@@ -135,7 +135,46 @@ func (f *FunctionType) Equals(other Type) bool {
 	return false
 }
 
-func ParseType(name string, structRegistry map[string]*StructType) Type {
+type BoxType struct {
+	Inner Type
+}
+
+func (b *BoxType) Name() string {
+	return fmt.Sprintf("Box[%s]", b.Inner.Name())
+}
+
+func (b *BoxType) Equals(other Type) bool {
+	if other == Any {
+		return true
+	}
+	if bt, ok := other.(*BoxType); ok {
+		return b.Inner.Equals(bt.Inner)
+	}
+	return false
+}
+
+type EnumType struct {
+	NameStr  string
+	Variants map[string][]Type
+}
+
+func (e *EnumType) Name() string { return e.NameStr }
+func (e *EnumType) Equals(other Type) bool {
+	if other == Any {
+		return true
+	}
+	if et, ok := other.(*EnumType); ok {
+		return e.NameStr == et.NameStr
+	}
+	return false
+}
+
+func ParseType(name string, structRegistry map[string]*StructType, enumRegistry ...map[string]*EnumType) Type {
+	var enums map[string]*EnumType
+	if len(enumRegistry) > 0 {
+		enums = enumRegistry[0]
+	}
+
 	switch name {
 	case "int":
 		return Int
@@ -150,28 +189,38 @@ func ParseType(name string, structRegistry map[string]*StructType) Type {
 	case "any":
 		return Any
 	default:
+		// Проверка Box[T]
+		if len(name) > 5 && name[:4] == "Box[" && name[len(name)-1] == ']' {
+			innerName := name[4 : len(name)-1]
+			return &BoxType{Inner: ParseType(innerName, structRegistry, enums)}
+		}
 		// Проверка Map[K, V]
 		if len(name) > 5 && name[:4] == "Map[" && name[len(name)-1] == ']' {
 			inner := name[4 : len(name)-1]
 			parts := strings.SplitN(inner, ",", 2)
 			if len(parts) == 2 {
-				k := ParseType(strings.TrimSpace(parts[0]), structRegistry)
-				v := ParseType(strings.TrimSpace(parts[1]), structRegistry)
+				k := ParseType(strings.TrimSpace(parts[0]), structRegistry, enums)
+				v := ParseType(strings.TrimSpace(parts[1]), structRegistry, enums)
 				return &MapType{Key: k, Value: v}
 			}
 		}
 		// Проверка Option[T]
 		if len(name) > 7 && name[:7] == "Option[" && name[len(name)-1] == ']' {
 			innerName := name[7 : len(name)-1]
-			return &OptionType{Inner: ParseType(innerName, structRegistry)}
+			return &OptionType{Inner: ParseType(innerName, structRegistry, enums)}
 		}
 		// Проверка [T]
 		if len(name) > 2 && name[0] == '[' && name[len(name)-1] == ']' {
 			innerName := name[1 : len(name)-1]
-			return &ArrayType{Element: ParseType(innerName, structRegistry)}
+			return &ArrayType{Element: ParseType(innerName, structRegistry, enums)}
 		}
 		if st, ok := structRegistry[name]; ok {
 			return st
+		}
+		if enums != nil {
+			if et, ok := enums[name]; ok {
+				return et
+			}
 		}
 		return BasicType(name)
 	}

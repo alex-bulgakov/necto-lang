@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"necto/pkg/ast"
+	"necto/pkg/lexer"
+	"necto/pkg/parser"
 )
 
 var (
@@ -71,9 +73,37 @@ var modules = map[string]*Module{
 			},
 		},
 	},
+	"Box": {
+		Name: "Box",
+		Methods: map[string]*Builtin{
+			"new": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("Box.new() takes exactly 1 argument")
+					}
+					return &BoxInstance{Value: args[0]}
+				},
+			},
+		},
+	},
 }
 
 var builtins = map[string]*Builtin{
+	"assert": {
+		Fn: func(args ...Object) Object {
+			if len(args) < 1 {
+				return newError("assert() takes at least 1 condition argument")
+			}
+			if !isTruthy(args[0]) {
+				msg := "assertion failed"
+				if len(args) > 1 {
+					msg = args[1].Inspect()
+				}
+				return newError("AssertionError: " + msg)
+			}
+			return NULL
+		},
+	},
 	"println": {
 		Fn: func(args ...Object) Object {
 			var parts []string
@@ -164,6 +194,40 @@ func Eval(node ast.Node, env *Environment) Object {
 		// В рантайме объявление структуры сохраняется как мета-информация
 		return NULL
 
+	case *ast.EnumDeclaration:
+		return NULL
+
+	case *ast.AssertStatement:
+		cond := Eval(n.Condition, env)
+		if isError(cond) {
+			return cond
+		}
+		if !isTruthy(cond) {
+			return newError("AssertionError: condition failed: %s", n.Condition.String())
+		}
+		return NULL
+
+	case *ast.TestBlockStatement:
+		return evalBlockStatement(n.Body, NewEnclosedEnvironment(env))
+
+	case *ast.ImportStatement:
+		return evalImportStatement(n, env)
+
+	case *ast.EnumConstructorExpr:
+		var args []Object
+		for _, a := range n.Arguments {
+			argVal := Eval(a, env)
+			if isError(argVal) {
+				return argVal
+			}
+			args = append(args, argVal)
+		}
+		return &EnumInstance{
+			EnumName: n.EnumName,
+			Variant:  n.VariantName,
+			Fields:   args,
+		}
+
 	case *ast.WhileStatement:
 		return evalWhileStatement(n, env)
 
@@ -253,6 +317,22 @@ func Eval(node ast.Node, env *Environment) Object {
 		return evalIndexExpression(left, index)
 
 	case *ast.DotExpression:
+		if ident, ok := n.Left.(*ast.Identifier); ok {
+			if mod, exists := modules[ident.Value]; exists {
+				if method, ok := mod.Methods[n.Right.Value]; ok {
+					return method
+				}
+				return newError("module '%s' has no method '%s'", ident.Value, n.Right.Value)
+			}
+			if _, inEnv := env.Get(ident.Value); !inEnv {
+				return &EnumInstance{
+					EnumName: ident.Value,
+					Variant:  n.Right.Value,
+					Fields:   nil,
+				}
+			}
+		}
+
 		left := Eval(n.Left, env)
 		if isError(left) {
 			return left
@@ -680,6 +760,33 @@ func matchesPattern(pat ast.Expression, val Object, scope *Environment) bool {
 		scope.Set(p.Value, val)
 		return true
 
+	case *ast.CallExpression:
+		target := val
+		if boxVal, ok := target.(*BoxInstance); ok {
+			target = boxVal.Value
+		}
+		// Pattern: Enum.Variant(a, b)
+		if dot, ok := p.Function.(*ast.DotExpression); ok {
+			if enumVal, ok := target.(*EnumInstance); ok {
+				if enumVal.Variant == dot.Right.Value && len(enumVal.Fields) == len(p.Arguments) {
+					for i, argPat := range p.Arguments {
+						if !matchesPattern(argPat, enumVal.Fields[i], scope) {
+							return false
+						}
+					}
+					return true
+				}
+			}
+		}
+		return false
+
+	case *ast.DotExpression:
+		// Pattern: Enum.Variant without arguments
+		if enumVal, ok := val.(*EnumInstance); ok {
+			return enumVal.Variant == p.Right.Value && len(enumVal.Fields) == 0
+		}
+		return false
+
 	case *ast.NoneLiteral:
 		if opt, ok := val.(*Option); ok && !opt.HasValue {
 			return true
@@ -739,6 +846,16 @@ func evalIndexExpression(left, index Object) Object {
 
 func evalDotExpression(left Object, prop string) Object {
 	switch obj := left.(type) {
+	case *BoxInstance:
+		if prop == "unwrap" {
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					return obj.Value
+				},
+			}
+		}
+		return evalDotExpression(obj.Value, prop)
+
 	case *StructInstance:
 		if val, exists := obj.Fields[prop]; exists {
 			return val
@@ -891,6 +1008,14 @@ func evalDotExpression(left Object, prop string) Object {
 		}
 	}
 
+	if prop == "unwrap" {
+		return &Builtin{
+			Fn: func(args ...Object) Object {
+				return left
+			},
+		}
+	}
+
 	return newError("property or method '%s' not found on %s", prop, left.Type())
 }
 
@@ -929,6 +1054,13 @@ func applyFunction(fn Object, args []Object) Object {
 
 	case *Builtin:
 		return function.Fn(args...)
+
+	case *EnumInstance:
+		return &EnumInstance{
+			EnumName: function.EnumName,
+			Variant:  function.Variant,
+			Fields:   args,
+		}
 
 	default:
 		return newError("not a function: %s", fn.Type())
@@ -986,4 +1118,30 @@ func isError(obj Object) bool {
 		return obj.Type() == ERROR_OBJ
 	}
 	return false
+}
+
+func evalImportStatement(stmt *ast.ImportStatement, env *Environment) Object {
+	bytes, err := os.ReadFile(stmt.Path)
+	if err != nil {
+		return newError("cannot import '%s': %s", stmt.Path, err.Error())
+	}
+	l := lexer.New(string(bytes))
+	p := parser.New(l)
+	prog := p.ParseProgram()
+	if len(p.Errors()) > 0 {
+		return newError("syntax error in imported module '%s': %s", stmt.Path, p.Errors()[0])
+	}
+	moduleEnv := NewEnvironment()
+	res := Eval(prog, moduleEnv)
+	if isError(res) {
+		return res
+	}
+	for _, sym := range stmt.Symbols {
+		if val, ok := moduleEnv.Get(sym.Value); ok {
+			env.Set(sym.Value, val)
+		} else {
+			return newError("symbol '%s' not found in module '%s'", sym.Value, stmt.Path)
+		}
+	}
+	return NULL
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"necto/pkg/ast"
 	"necto/pkg/codegen"
@@ -14,13 +15,14 @@ import (
 	"necto/pkg/types"
 )
 
-const VERSION = "0.2.0-alpha"
+const VERSION = "0.3.0-alpha"
 
 func printUsage() {
 	fmt.Println("Necto Programming Language Compiler & Runtime")
 	fmt.Printf("Version: %s\n\n", VERSION)
 	fmt.Println("Usage:")
 	fmt.Println("  necto run <file.nc>            Run a Necto source file directly")
+	fmt.Println("  necto test <file.nc>           Run all unit tests in a Necto source file")
 	fmt.Println("  necto build <file.nc> -o <out> Compile Necto program to native binary")
 	fmt.Println("  necto check <file.nc>          Type check program without executing")
 	fmt.Println("  necto repl                     Start interactive Necto REPL")
@@ -42,6 +44,13 @@ func main() {
 			os.Exit(1)
 		}
 		runFile(os.Args[2])
+
+	case "test":
+		if len(os.Args) < 3 {
+			fmt.Fprintln(os.Stderr, "Error: missing source file to test. Example: necto test main.nc")
+			os.Exit(1)
+		}
+		testFile(os.Args[2])
 
 	case "build":
 		if len(os.Args) < 3 {
@@ -170,6 +179,64 @@ func buildFile(sourceFile, outFile string) {
 		os.Exit(1)
 	}
 	fmt.Printf("✓ Successfully created native binary: %s\n", outFile)
+}
+
+func testFile(filepath string) {
+	prog, err := parseAndCheck(filepath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	// Сначала выполняем глобальные объявления (функции, структуры, enums) в базовом окружении
+	baseEnv := eval.NewEnvironment()
+	for _, stmt := range prog.Statements {
+		if _, isTest := stmt.(*ast.TestBlockStatement); !isTest {
+			res := eval.Eval(stmt, baseEnv)
+			if res != nil && res.Type() == eval.ERROR_OBJ {
+				fmt.Fprintf(os.Stderr, "Initialization Error: %s\n", res.Inspect())
+				os.Exit(1)
+			}
+		}
+	}
+
+	// Собираем все тесты
+	var tests []*ast.TestBlockStatement
+	for _, stmt := range prog.Statements {
+		if tb, isTest := stmt.(*ast.TestBlockStatement); isTest {
+			tests = append(tests, tb)
+		}
+	}
+
+	if len(tests) == 0 {
+		fmt.Printf("No tests found in '%s'\n", filepath)
+		return
+	}
+
+	fmt.Printf("Running %d test(s) in %s...\n\n", len(tests), filepath)
+	passed := 0
+	failed := 0
+
+	for _, t := range tests {
+		testEnv := eval.NewEnclosedEnvironment(baseEnv)
+		start := time.Now()
+		res := eval.Eval(t.Body, testEnv)
+		duration := time.Since(start)
+
+		if res != nil && res.Type() == eval.ERROR_OBJ {
+			fmt.Printf("  ✗ FAIL: test \"%s\" (took %v)\n", t.Name, duration)
+			fmt.Printf("    %s\n\n", res.Inspect())
+			failed++
+		} else {
+			fmt.Printf("  ✓ PASS: test \"%s\" (took %v)\n", t.Name, duration)
+			passed++
+		}
+	}
+
+	fmt.Printf("\nTest Results: %d passed, %d failed\n", passed, failed)
+	if failed > 0 {
+		os.Exit(1)
+	}
 }
 
 func startRepl() {

@@ -28,6 +28,8 @@ const (
 	STRUCT_OBJ      = "STRUCT"
 	MAP_OBJ         = "MAP"
 	MODULE_OBJ      = "MODULE"
+	BOX_OBJ         = "BOX"
+	ENUM_OBJ        = "ENUM"
 )
 
 type Object interface {
@@ -188,3 +190,30 @@ type Module struct {
 
 func (m *Module) Type() ObjectType { return MODULE_OBJ }
 func (m *Module) Inspect() string  { return "<module " + m.Name + ">" }
+
+type BoxInstance struct {
+	Value Object
+}
+
+func (b *BoxInstance) Type() ObjectType { return BOX_OBJ }
+func (b *BoxInstance) Inspect() string  { return fmt.Sprintf("Box(%s)", b.Value.Inspect()) }
+
+type EnumInstance struct {
+	EnumName string
+	Variant  string
+	Fields   []Object
+}
+
+func (e *EnumInstance) Type() ObjectType { return ENUM_OBJ }
+func (e *EnumInstance) Inspect() string {
+	var out bytes.Buffer
+	out.WriteString(e.EnumName + "." + e.Variant)
+	if len(e.Fields) > 0 {
+		var parts []string
+		for _, f := range e.Fields {
+			parts = append(parts, f.Inspect())
+		}
+		out.WriteString("(" + strings.Join(parts, ", ") + ")")
+	}
+	return out.String()
+}

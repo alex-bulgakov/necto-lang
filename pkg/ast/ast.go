@@ -224,6 +224,77 @@ func (sd *StructDeclaration) String() string {
 	return out.String()
 }
 
+type EnumVariantDecl struct {
+	Name  *Identifier
+	Types []string // типы полезной нагрузки, e.g. Number(int) -> ["int"], Eof -> []
+}
+
+type EnumDeclaration struct {
+	Token    token.Token // токен ENUM
+	Name     *Identifier
+	Variants []*EnumVariantDecl
+}
+
+func (ed *EnumDeclaration) statementNode()       {}
+func (ed *EnumDeclaration) TokenLiteral() string { return ed.Token.Literal }
+func (ed *EnumDeclaration) Pos() token.Pos       { return ed.Token.Pos }
+func (ed *EnumDeclaration) String() string {
+	var out bytes.Buffer
+	out.WriteString("enum " + ed.Name.String() + " {\n")
+	for _, v := range ed.Variants {
+		out.WriteString("  " + v.Name.String())
+		if len(v.Types) > 0 {
+			out.WriteString("(" + strings.Join(v.Types, ", ") + ")")
+		}
+		out.WriteString("\n")
+	}
+	out.WriteString("}")
+	return out.String()
+}
+
+type ImportStatement struct {
+	Token   token.Token // токен IMPORT
+	Symbols []*Identifier
+	Path    string // путь к файлу, e.g. "./math.nc"
+}
+
+func (is *ImportStatement) statementNode()       {}
+func (is *ImportStatement) TokenLiteral() string { return is.Token.Literal }
+func (is *ImportStatement) Pos() token.Pos       { return is.Token.Pos }
+func (is *ImportStatement) String() string {
+	var syms []string
+	for _, s := range is.Symbols {
+		syms = append(syms, s.String())
+	}
+	return "import { " + strings.Join(syms, ", ") + " } from \"" + is.Path + "\""
+}
+
+type TestBlockStatement struct {
+	Token token.Token // токен TEST
+	Name  string      // название теста
+	Body  *BlockStatement
+}
+
+func (tb *TestBlockStatement) statementNode()       {}
+func (tb *TestBlockStatement) TokenLiteral() string { return tb.Token.Literal }
+func (tb *TestBlockStatement) Pos() token.Pos       { return tb.Token.Pos }
+func (tb *TestBlockStatement) String() string {
+	return "test \"" + tb.Name + "\" " + tb.Body.String()
+}
+
+type AssertStatement struct {
+	Token     token.Token // токен ASSERT
+	Condition Expression
+	Message   string
+}
+
+func (as *AssertStatement) statementNode()       {}
+func (as *AssertStatement) TokenLiteral() string { return as.Token.Literal }
+func (as *AssertStatement) Pos() token.Pos       { return as.Token.Pos }
+func (as *AssertStatement) String() string {
+	return "assert(" + as.Condition.String() + ")"
+}
+
 type BreakStatement struct {
 	Token token.Token
 }
@@ -505,5 +576,28 @@ func (me *MatchExpression) String() string {
 		out.WriteString(fmt.Sprintf("  %s => %s,\n", c.Pattern.String(), c.Body.String()))
 	}
 	out.WriteString("}")
+	return out.String()
+}
+
+type EnumConstructorExpr struct {
+	Token       token.Token // токен IDENT (имя Enum)
+	EnumName    string
+	VariantName string
+	Arguments   []Expression
+}
+
+func (ece *EnumConstructorExpr) expressionNode()      {}
+func (ece *EnumConstructorExpr) TokenLiteral() string { return ece.Token.Literal }
+func (ece *EnumConstructorExpr) Pos() token.Pos       { return ece.Token.Pos }
+func (ece *EnumConstructorExpr) String() string {
+	var out bytes.Buffer
+	out.WriteString(ece.EnumName + "." + ece.VariantName)
+	if len(ece.Arguments) > 0 {
+		var args []string
+		for _, a := range ece.Arguments {
+			args = append(args, a.String())
+		}
+		out.WriteString("(" + strings.Join(args, ", ") + ")")
+	}
 	return out.String()
 }

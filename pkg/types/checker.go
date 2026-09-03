@@ -48,6 +48,7 @@ type Checker struct {
 	errors         []string
 	scope          *Scope
 	structRegistry map[string]*StructType
+	enumRegistry   map[string]*EnumType
 	currentFnRet   Type
 }
 
@@ -65,11 +66,17 @@ func NewChecker() *Checker {
 		Type:  &FunctionType{Params: []Type{Any}, ReturnType: Void},
 		IsMut: false,
 	})
+	rootScope.Insert(Symbol{
+		Name:  "assert",
+		Type:  &FunctionType{Params: []Type{Bool}, ReturnType: Void},
+		IsMut: false,
+	})
 
 	return &Checker{
 		errors:         []string{},
 		scope:          rootScope,
 		structRegistry: make(map[string]*StructType),
+		enumRegistry:   make(map[string]*EnumType),
 	}
 }
 
@@ -86,10 +93,22 @@ func (c *Checker) Check(program *ast.Program) {
 	// Первый проход: сбор объявлений структур и сигнатур функций
 	for _, stmt := range program.Statements {
 		switch s := stmt.(type) {
+		case *ast.EnumDeclaration:
+			variants := make(map[string][]Type)
+			for _, v := range s.Variants {
+				var pTypes []Type
+				for _, tName := range v.Types {
+					pTypes = append(pTypes, ParseType(tName, c.structRegistry, c.enumRegistry))
+				}
+				variants[v.Name.Value] = pTypes
+			}
+			et := &EnumType{NameStr: s.Name.Value, Variants: variants}
+			c.enumRegistry[s.Name.Value] = et
+
 		case *ast.StructDeclaration:
 			fields := make(map[string]Type)
 			for _, f := range s.Fields {
-				fields[f.Name.Value] = ParseType(f.Type, c.structRegistry)
+				fields[f.Name.Value] = ParseType(f.Type, c.structRegistry, c.enumRegistry)
 			}
 			st := &StructType{NameStr: s.Name.Value, Fields: fields}
 			c.structRegistry[s.Name.Value] = st
@@ -97,9 +116,9 @@ func (c *Checker) Check(program *ast.Program) {
 		case *ast.FnDeclaration:
 			params := make([]Type, len(s.Parameters))
 			for i, p := range s.Parameters {
-				params[i] = ParseType(p.Type, c.structRegistry)
+				params[i] = ParseType(p.Type, c.structRegistry, c.enumRegistry)
 			}
-			retType := ParseType(s.ReturnType, c.structRegistry)
+			retType := ParseType(s.ReturnType, c.structRegistry, c.enumRegistry)
 			fnType := &FunctionType{Params: params, ReturnType: retType}
 			c.scope.Insert(Symbol{
 				Name:  s.Name.Value,
@@ -132,7 +151,23 @@ func (c *Checker) checkStatement(stmt ast.Statement) {
 		c.checkForInStatement(s)
 	case *ast.FnDeclaration:
 		c.checkFnBody(s)
-	case *ast.StructDeclaration, *ast.BreakStatement, *ast.ContinueStatement:
+	case *ast.TestBlockStatement:
+		c.checkBlockStatement(s.Body)
+	case *ast.AssertStatement:
+		condT := c.checkExpression(s.Condition)
+		if !condT.Equals(Bool) && !condT.Equals(Any) {
+			c.errorf(s.Pos(), "assert condition must be bool, got '%s'", condT.Name())
+		}
+	case *ast.ImportStatement:
+		for _, sym := range s.Symbols {
+			c.scope.Insert(Symbol{
+				Name:  sym.Value,
+				Type:  Any,
+				IsMut: false,
+				Pos:   sym.Pos(),
+			})
+		}
+	case *ast.EnumDeclaration, *ast.StructDeclaration, *ast.BreakStatement, *ast.ContinueStatement:
 		// уже зарегистрировано или тривиально
 	default:
 		// ignore
@@ -147,7 +182,7 @@ func (c *Checker) checkLetStatement(s *ast.LetStatement) {
 
 	var declaredType Type = Any
 	if s.TypeAnnotation != "" {
-		declaredType = ParseType(s.TypeAnnotation, c.structRegistry)
+		declaredType = ParseType(s.TypeAnnotation, c.structRegistry, c.enumRegistry)
 		if s.Value != nil && !declaredType.Equals(valType) {
 			c.errorf(s.Pos(), "cannot assign value of type '%s' to variable '%s' of type '%s'",
 				valType.Name(), s.Name.Value, declaredType.Name())
@@ -222,7 +257,7 @@ func (c *Checker) checkForInStatement(s *ast.ForInStatement) {
 }
 
 func (c *Checker) checkFnBody(s *ast.FnDeclaration) {
-	retType := ParseType(s.ReturnType, c.structRegistry)
+	retType := ParseType(s.ReturnType, c.structRegistry, c.enumRegistry)
 	prevRet := c.currentFnRet
 	c.currentFnRet = retType
 	defer func() { c.currentFnRet = prevRet }()
@@ -232,7 +267,7 @@ func (c *Checker) checkFnBody(s *ast.FnDeclaration) {
 	defer func() { c.scope = prevScope }()
 
 	for _, param := range s.Parameters {
-		pType := ParseType(param.Type, c.structRegistry)
+		pType := ParseType(param.Type, c.structRegistry, c.enumRegistry)
 		c.scope.Insert(Symbol{
 			Name:  param.Name.Value,
 			Type:  pType,
@@ -272,7 +307,10 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 		return &OptionType{Inner: valT}
 
 	case *ast.Identifier:
-		if e.Value == "fs" || e.Value == "os" || e.Value == "Map" || e.Value == "_" {
+		if e.Value == "fs" || e.Value == "os" || e.Value == "Map" || e.Value == "Box" || e.Value == "_" {
+			return Any
+		}
+		if _, isEnum := c.enumRegistry[e.Value]; isEnum {
 			return Any
 		}
 		sym, found := c.scope.Lookup(e.Value)
@@ -395,10 +433,31 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 				case "new":
 					return &FunctionType{Params: []Type{}, ReturnType: &MapType{Key: Any, Value: Any}}
 				}
+			case "Box":
+				if e.Right.Value == "new" {
+					return &FunctionType{Params: []Type{Any}, ReturnType: &BoxType{Inner: Any}}
+				}
+			}
+
+			// Проверяем конструкторы вариантов Enum: EnumName.Variant
+			if et, exists := c.enumRegistry[ident.Value]; exists {
+				if paramTypes, vExists := et.Variants[e.Right.Value]; vExists {
+					if len(paramTypes) == 0 {
+						return et
+					}
+					return &FunctionType{Params: paramTypes, ReturnType: et}
+				}
+				c.errorf(e.Pos(), "variant '%s' does not exist on enum '%s'", e.Right.Value, et.NameStr)
+				return et
 			}
 		}
 
 		leftT := c.checkExpression(e.Left)
+		if boxT, ok := leftT.(*BoxType); ok {
+			if e.Right.Value == "unwrap" {
+				return &FunctionType{Params: []Type{}, ReturnType: boxT.Inner}
+			}
+		}
 		if st, ok := leftT.(*StructType); ok {
 			if fType, exists := st.Fields[e.Right.Value]; exists {
 				return fType
@@ -505,6 +564,15 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 			c.scope = prevScope
 		}
 		return Any
+
+	case *ast.EnumConstructorExpr:
+		if et, exists := c.enumRegistry[e.EnumName]; exists {
+			for _, arg := range e.Arguments {
+				c.checkExpression(arg)
+			}
+			return et
+		}
+		return Any
 	}
 
 	return Any
@@ -527,5 +595,24 @@ func (c *Checker) bindPatternVariables(pat ast.Expression, targetType Type) {
 			innerType = optType.Inner
 		}
 		c.bindPatternVariables(p.Value, innerType)
+
+	case *ast.CallExpression:
+		if dot, ok := p.Function.(*ast.DotExpression); ok {
+			if ident, ok := dot.Left.(*ast.Identifier); ok {
+				if et, ok := c.enumRegistry[ident.Value]; ok {
+					if paramTypes, ok := et.Variants[dot.Right.Value]; ok {
+						for i, arg := range p.Arguments {
+							var pT Type = Any
+							if i < len(paramTypes) {
+								pT = paramTypes[i]
+							}
+							c.bindPatternVariables(arg, pT)
+						}
+					}
+				}
+			}
+		}
+	case *ast.DotExpression:
+		// Вариант без аргументов (e.g. Token.Eof)
 	}
 }

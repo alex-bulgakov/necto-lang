@@ -210,6 +210,14 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseFnDeclaration()
 	case token.STRUCT:
 		return p.parseStructDeclaration()
+	case token.ENUM:
+		return p.parseEnumDeclaration()
+	case token.IMPORT:
+		return p.parseImportStatement()
+	case token.TEST:
+		return p.parseTestBlockStatement()
+	case token.ASSERT:
+		return p.parseAssertStatement()
 	case token.BREAK:
 		return &ast.BreakStatement{Token: p.curToken}
 	case token.CONTINUE:
@@ -442,6 +450,161 @@ func (p *Parser) parseStructDeclaration() *ast.StructDeclaration {
 
 	if !p.expectPeek(token.RBRACE) {
 		return nil
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseEnumDeclaration() *ast.EnumDeclaration {
+	stmt := &ast.EnumDeclaration{Token: p.curToken}
+
+	if !p.expectPeek(token.IDENT) {
+		return nil
+	}
+	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	for !p.peekTokenIs(token.RBRACE) && !p.peekTokenIs(token.EOF) {
+		if p.peekTokenIs(token.COMMA) || p.peekTokenIs(token.SEMICOLON) {
+			p.nextToken()
+			continue
+		}
+		p.nextToken()
+		varName := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		varTypes := []string{}
+
+		if p.peekTokenIs(token.LPAREN) {
+			p.nextToken() // (
+			if !p.peekTokenIs(token.RPAREN) {
+				p.nextToken()
+				if p.peekTokenIs(token.COLON) {
+					p.nextToken() // :
+					varTypes = append(varTypes, p.parseTypeSignature())
+				} else {
+					varTypes = append(varTypes, p.parseTypeFromCurrentToken())
+				}
+
+				for p.peekTokenIs(token.COMMA) {
+					p.nextToken() // ,
+					p.nextToken()
+					if p.peekTokenIs(token.COLON) {
+						p.nextToken() // :
+						varTypes = append(varTypes, p.parseTypeSignature())
+					} else {
+						varTypes = append(varTypes, p.parseTypeFromCurrentToken())
+					}
+				}
+			}
+			if !p.expectPeek(token.RPAREN) {
+				return nil
+			}
+		}
+
+		stmt.Variants = append(stmt.Variants, &ast.EnumVariantDecl{
+			Name:  varName,
+			Types: varTypes,
+		})
+	}
+
+	if !p.expectPeek(token.RBRACE) {
+		return nil
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseTypeFromCurrentToken() string {
+	typeStr := p.curToken.Literal
+	if p.peekTokenIs(token.LBRACKET) {
+		p.nextToken() // [
+		inner := p.parseTypeSignature()
+		if p.peekTokenIs(token.COMMA) {
+			p.nextToken() // ,
+			inner2 := p.parseTypeSignature()
+			if !p.expectPeek(token.RBRACKET) {
+				return typeStr
+			}
+			return typeStr + "[" + inner + ", " + inner2 + "]"
+		}
+		if !p.expectPeek(token.RBRACKET) {
+			return typeStr
+		}
+		return typeStr + "[" + inner + "]"
+	}
+	return typeStr
+}
+
+func (p *Parser) parseImportStatement() *ast.ImportStatement {
+	stmt := &ast.ImportStatement{Token: p.curToken}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	for !p.peekTokenIs(token.RBRACE) && !p.peekTokenIs(token.EOF) {
+		if p.peekTokenIs(token.COMMA) {
+			p.nextToken()
+			continue
+		}
+		p.nextToken()
+		stmt.Symbols = append(stmt.Symbols, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+	}
+
+	if !p.expectPeek(token.RBRACE) {
+		return nil
+	}
+
+	if !p.expectPeek(token.FROM) {
+		return nil
+	}
+
+	if !p.expectPeek(token.STRING) {
+		return nil
+	}
+
+	stmt.Path = p.curToken.Literal
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseTestBlockStatement() *ast.TestBlockStatement {
+	stmt := &ast.TestBlockStatement{Token: p.curToken}
+
+	if !p.expectPeek(token.STRING) {
+		return nil
+	}
+	stmt.Name = p.curToken.Literal
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	stmt.Body = p.parseBlockStatement()
+	return stmt
+}
+
+func (p *Parser) parseAssertStatement() *ast.AssertStatement {
+	stmt := &ast.AssertStatement{Token: p.curToken}
+
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+
+	p.nextToken()
+	stmt.Condition = p.parseExpression(LOWEST)
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
 	}
 
 	return stmt

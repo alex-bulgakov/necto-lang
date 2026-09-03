@@ -90,6 +90,9 @@ const (
 	CONTINUE = "CONTINUE"
 	SOME     = "SOME"
 	NONE     = "NONE"
+	TEST     = "TEST"
+	ASSERT   = "ASSERT"
+	FROM     = "FROM"
 )
 
 var keywords = map[string]TokenType{
@@ -116,6 +119,9 @@ var keywords = map[string]TokenType{
 	"continue": CONTINUE,
 	"Some":     SOME,
 	"None":     NONE,
+	"test":     TEST,
+	"assert":   ASSERT,
+	"from":     FROM,
 }
 
 func LookupIdent(ident string) TokenType {
