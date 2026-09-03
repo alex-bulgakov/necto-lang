@@ -101,30 +101,74 @@ impl Parser {
                 }
             },
             _ => {
-                return Result.Err("unexpected token in primary expression")
+                return Result.Err(f"unexpected token in primary expression: {tok}")
             },
         }
     }
 
+    fn parse_postfix(mut self) -> Result[Expr, str] {
+        let mut expr = self.parse_primary()?
+
+        while self.has_more() {
+            let tok = self.peek()
+            match tok {
+                Token.Dot => {
+                    self.advance() // .
+                    let id_tok = self.advance()
+                    let mut member_name = ""
+                    match id_tok {
+                        Token.Ident(mname) => { member_name = mname },
+                        _ => { return Result.Err("expected member name after '.'") },
+                    }
+                    if self.peek() == Token.LParen {
+                        self.advance() // (
+                        let mut args: [Expr] = []
+                        while self.has_more() {
+                            if self.peek() == Token.RParen {
+                                self.advance()
+                                break
+                            }
+                            let arg = self.parse_expr()?
+                            args.push(arg)
+                            if self.peek() == Token.Comma {
+                                self.advance()
+                            } else if self.peek() == Token.RParen {
+                                self.advance()
+                                break
+                            }
+                        }
+                        expr = Expr.MethodCall(Box.new(expr), member_name, args)
+                    } else {
+                        expr = Expr.Dot(Box.new(expr), member_name)
+                    }
+                },
+                _ => {
+                    break
+                },
+            }
+        }
+        return Result.Ok(expr)
+    }
+
     fn parse_factor(mut self) -> Result[Expr, str] {
-        let mut left = self.parse_primary()?
+        let mut left = self.parse_postfix()?
 
         while self.has_more() {
             let tok = self.peek()
             match tok {
                 Token.Star => {
                     self.advance()
-                    let right = self.parse_primary()?
+                    let right = self.parse_postfix()?
                     left = Expr.Binary("*", Box.new(left), Box.new(right))
                 },
                 Token.Slash => {
                     self.advance()
-                    let right = self.parse_primary()?
+                    let right = self.parse_postfix()?
                     left = Expr.Binary("/", Box.new(left), Box.new(right))
                 },
                 Token.Percent => {
                     self.advance()
-                    let right = self.parse_primary()?
+                    let right = self.parse_postfix()?
                     left = Expr.Binary("%", Box.new(left), Box.new(right))
                 },
                 _ => {
@@ -433,18 +477,108 @@ impl Parser {
                 return Result.Ok(Stmt.Assert(cond))
             },
 
+            Token.Struct => {
+                self.advance() // struct
+                let id_tok = self.advance()
+                let mut struct_name = ""
+                match id_tok {
+                    Token.Ident(sname) => { struct_name = sname },
+                    _ => { return Result.Err("expected struct name") },
+                }
+                match self.advance() {
+                    Token.LBrace => {},
+                    _ => { return Result.Err("expected '{' after struct name") },
+                }
+                let mut fields: [str] = []
+                while self.has_more() && self.peek() != Token.RBrace {
+                    let f_tok = self.advance()
+                    match f_tok {
+                        Token.Ident(fname) => {
+                            if self.peek() == Token.Colon {
+                                self.advance()
+                                self.advance() // тип
+                            }
+                            fields.push(fname)
+                        },
+                        _ => {},
+                    }
+                    if self.peek() == Token.Comma {
+                        self.advance()
+                    }
+                }
+                match self.advance() {
+                    Token.RBrace => {},
+                    _ => { return Result.Err("expected '}' at end of struct declaration") },
+                }
+                return Result.Ok(Stmt.StructDecl(struct_name, fields))
+            },
+
+            Token.Impl => {
+                self.advance() // impl
+                let id_tok = self.advance()
+                let mut target_name = ""
+                match id_tok {
+                    Token.Ident(tname) => { target_name = tname },
+                    _ => { return Result.Err("expected target struct name after 'impl'") },
+                }
+                match self.advance() {
+                    Token.LBrace => {},
+                    _ => { return Result.Err("expected '{' after impl target") },
+                }
+                let mut methods: [Stmt] = []
+                while self.has_more() && self.peek() != Token.RBrace {
+                    let m_stmt = self.parse_statement()?
+                    methods.push(m_stmt)
+                }
+                match self.advance() {
+                    Token.RBrace => {},
+                    _ => { return Result.Err("expected '}' at end of impl block") },
+                }
+                return Result.Ok(Stmt.ImplBlock(target_name, methods))
+            },
+
             _ => {
                 // Присваивание или ExpressionStatement
                 let expr = self.parse_expr()?
-                if self.peek() == Token.Assign {
-                    self.advance()
+                let mut is_assign = false
+                let mut op = "="
+                let next_t = self.peek()
+                match next_t {
+                    Token.Assign => {
+                        is_assign = true
+                        op = "="
+                        self.advance()
+                    },
+                    Token.PlusAssign => {
+                        is_assign = true
+                        op = "+="
+                        self.advance()
+                    },
+                    Token.MinusAssign => {
+                        is_assign = true
+                        op = "-="
+                        self.advance()
+                    },
+                    Token.MulAssign => {
+                        is_assign = true
+                        op = "*="
+                        self.advance()
+                    },
+                    Token.DivAssign => {
+                        is_assign = true
+                        op = "/="
+                        self.advance()
+                    },
+                    _ => {},
+                }
+                if is_assign {
                     let new_val = self.parse_expr()?
                     match expr {
                         Expr.Var(v_name) => {
                             if self.peek() == Token.Semicolon {
                                 self.advance()
                             }
-                            return Result.Ok(Stmt.Assign(v_name, "=", new_val))
+                            return Result.Ok(Stmt.Assign(v_name, op, new_val))
                         },
                         _ => {
                             return Result.Err("invalid assignment target")

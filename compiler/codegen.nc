@@ -39,14 +39,30 @@ impl Codegen {
             Expr.Call(name, args) => {
                 if name == "println" {
                     if args.len() == 1 {
-                        let arg_code = self.emit_expr(args[0])
-                        return f"printf(\"%lld\\n\", (long long)({arg_code}))"
+                        let arg = args[0]
+                        let arg_code = self.emit_expr(arg)
+                        match arg {
+                            Expr.StrVal(s) => {
+                                return f"printf(\"%s\\n\", {arg_code})"
+                            },
+                            _ => {
+                                return f"printf(\"%lld\\n\", (long long)({arg_code}))"
+                            },
+                        }
                     }
                 }
                 if name == "print" {
                     if args.len() == 1 {
-                        let arg_code = self.emit_expr(args[0])
-                        return f"printf(\"%lld\", (long long)({arg_code}))"
+                        let arg = args[0]
+                        let arg_code = self.emit_expr(arg)
+                        match arg {
+                            Expr.StrVal(s) => {
+                                return f"printf(\"%s\", {arg_code})"
+                            },
+                            _ => {
+                                return f"printf(\"%lld\", (long long)({arg_code}))"
+                            },
+                        }
                     }
                 }
                 let mut arg_strs: [str] = []
@@ -63,6 +79,19 @@ impl Codegen {
             Expr.Dot(obj, field) => {
                 let o = self.emit_expr(obj.unwrap())
                 return f"{o}.{field}"
+            },
+            Expr.MethodCall(obj, method, args) => {
+                let o = self.emit_expr(obj.unwrap())
+                let mut arg_strs: [str] = [o]
+                for i in 0..args.len() {
+                    arg_strs.push(self.emit_expr(args[i]))
+                }
+                let mut joined = ""
+                for j in 0..arg_strs.len() {
+                    if j > 0 { joined += ", " }
+                    joined += arg_strs[j]
+                }
+                return f"{method}({joined})"
             },
             _ => {
                 return "0"
@@ -154,6 +183,13 @@ impl Codegen {
                     out += "    long long " + fields[i] + ";\n"
                 }
                 out += "} " + name + ";\n\n"
+                return out
+            },
+            Stmt.ImplBlock(target, methods) => {
+                let mut out = ""
+                for i in 0..methods.len() {
+                    out += self.emit_stmt(methods[i])
+                }
                 return out
             },
             Stmt.Assert(cond) => {

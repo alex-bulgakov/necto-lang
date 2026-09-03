@@ -25,5 +25,6 @@ enum Stmt {
     ForIn(str, int, int, [Stmt])
     FnDecl(str, [str], str, [Stmt])
     StructDecl(str, [str])
+    ImplBlock(str, [Stmt])
     Assert(Expr)
 }

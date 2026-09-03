@@ -135,6 +135,12 @@ impl Lexer {
             return Result.Ok(self.scan_number())
         }
 
+        // F-строки: f"..."
+        if ch == 102 && self.peek_next() == 34 {
+            self.advance() // пропускаем 'f'
+            return self.scan_string()
+        }
+
         // Идентификаторы и ключевые слова
         let is_alpha = (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch == 95
         if is_alpha {

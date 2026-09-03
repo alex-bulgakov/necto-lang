@@ -49,9 +49,58 @@ test "self-hosted parser and codegen on arithmetic function" {
     }
 }
 
+test "self-hosted parser and codegen on struct and impl" {
+    let src = "struct Point { x: int, y: int }\nimpl Point { fn get_x(self) -> int { return self.x; } }"
+    let res = compile_source_to_c(src)
+    match res {
+        Result.Ok(c) => {
+            assert(c.contains("typedef struct {"))
+            assert(c.contains("long long x;"))
+            assert(c.contains("get_x"))
+        },
+        Result.Err(e) => {
+            println(f"Compilation error: {e}")
+            assert(false)
+        },
+    }
+}
+
 fn main() {
+    let args = os.args()
+    let mut file_to_compile = ""
+    for i in 1..args.len() {
+        let a = args[i]
+        if a.contains(".nc") && !a.contains("compiler/main.nc") && !a.contains("compiler\\main.nc") {
+            file_to_compile = a
+            break
+        }
+    }
+
+    if file_to_compile != "" {
+        println(f"Compiling '{file_to_compile}' using pure Necto self-hosted compiler...")
+        match fs.read_file(file_to_compile) {
+            Some(src) => {
+                let res = compile_source_to_c(src)
+                match res {
+                    Result.Ok(c_code) => {
+                        let out_file = "stage1_output.tmp.c"
+                        fs.write_file(out_file, c_code)
+                        println(f"✓ Compilation successful! Output generated to '{out_file}'")
+                    },
+                    Result.Err(err) => {
+                        println(f"✗ Compilation error: {err}")
+                    },
+                }
+            },
+            None => {
+                println(f"✗ Error: could not read file '{file_to_compile}'")
+            },
+        }
+        return
+    }
+
     println("==================================================================")
-    println("     Necto Self-Hosted Compiler (Stage 1) — Written in Necto      ")
+    println("     Necto Self-Hosted Compiler (Stage 2) — Written in Necto      ")
     println("==================================================================")
 
     let test_program = "fn compute(x: int, y: int) -> int {\n    return (x * 2) + (y * 3);\n}\n\nfn main() {\n    let val = compute(5, 10);\n    println(val);\n}\n"

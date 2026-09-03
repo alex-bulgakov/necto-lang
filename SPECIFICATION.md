@@ -1,7 +1,7 @@
-# Официальная спецификация языка программирования Necto (v0.7.0)
+# Официальная спецификация языка программирования Necto (v0.8.0)
 
 > **Статус документа:** Официальная спецификация и эталонное руководство  
-> **Версия языка:** `v0.7.0-alpha`  
+> **Версия языка:** `v0.8.0-alpha`  
 > **Последнее обновление:** 2026-09-03  
 
 ---
@@ -341,16 +341,21 @@ fn main() {
 * `necto repl` — интерактивная оболочка REPL.
 * `necto version` — версия тулчейна.
 
-### 6.2. Самохостинговый компилятор Necto (Self-Hosting Stage 1 & Stage 2)
+### 6.2. Самохостинговый компилятор Necto (Self-Hosting: Stage 1, Stage 2 и Stage 3)
 Компилятор Necto полностью реализован на самом языке Necto в пакете `compiler/`:
 * `compiler/token.nc` — лексемы и ключевые слова языка.
-* `compiler/lexer.nc` — посимвольный лексический анализатор (`struct Lexer`).
-* `compiler/ast.nc` — рекурсивное AST-дерево (`enum Expr`, `enum Stmt`, `Box[T]`).
-* `compiler/parser.nc` — синтаксический анализатор рекурсивного спуска (`struct Parser`).
+* `compiler/lexer.nc` — посимвольный лексический анализатор (`struct Lexer`) с поддержкой f-строк.
+* `compiler/ast.nc` — рекурсивное AST-дерево (`enum Expr`, `enum Stmt`, `Box[T]`, `ImplBlock`, `MethodCall`).
+* `compiler/parser.nc` — синтаксический анализатор рекурсивного спуска (`struct Parser`) с поддержкой структур, методов и операторов присваивания.
 * `compiler/codegen.nc` — генератор C/LLVM машинного рантайма (`struct Codegen`).
-* `compiler/main.nc` — CLI интерфейс самохостингового компилятора.
+* `compiler/main.nc` — CLI интерфейс самохостингового компилятора с поддержкой `os.args()` и `fs.read_file()`.
 
-Автономная сборка компилятора компилятором (Stage 2):
+#### Стадии самохостинга (Self-Hosting Pipeline):
+1. **Stage 1 (Pure Necto Implementation):** Вся кодовая база компилятора написана на 100% чистом Necto.
+2. **Stage 2 (Native Bootstrap):** Команда `necto bootstrap` компилирует `compiler/*.nc` в автономный нативный бинарник `bin/necto-native.exe`.
+3. **Stage 3 (Full Independence):** Бинарник `bin/necto-native.exe` способен автономно принимать и компилировать произвольные программы Necto из командной строки без зависимости от рантайма Go.
+
+Автономная сборка компилятора:
 ```powershell
 necto bootstrap
 ```
