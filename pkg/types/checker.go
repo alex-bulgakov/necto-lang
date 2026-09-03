@@ -1,0 +1,531 @@
+package types
+
+import (
+	"fmt"
+
+	"necto/pkg/ast"
+	"necto/pkg/token"
+)
+
+type Symbol struct {
+	Name  string
+	Type  Type
+	IsMut bool
+	Pos   token.Pos
+}
+
+type Scope struct {
+	parent  *Scope
+	symbols map[string]Symbol
+}
+
+func NewScope(parent *Scope) *Scope {
+	return &Scope{
+		parent:  parent,
+		symbols: make(map[string]Symbol),
+	}
+}
+
+func (s *Scope) Insert(sym Symbol) bool {
+	if _, ok := s.symbols[sym.Name]; ok {
+		return false // уже объявлено в текущем скоупе
+	}
+	s.symbols[sym.Name] = sym
+	return true
+}
+
+func (s *Scope) Lookup(name string) (Symbol, bool) {
+	if sym, ok := s.symbols[name]; ok {
+		return sym, true
+	}
+	if s.parent != nil {
+		return s.parent.Lookup(name)
+	}
+	return Symbol{}, false
+}
+
+type Checker struct {
+	errors         []string
+	scope          *Scope
+	structRegistry map[string]*StructType
+	currentFnRet   Type
+}
+
+func NewChecker() *Checker {
+	rootScope := NewScope(nil)
+
+	// Регистрируем встроенные функции
+	rootScope.Insert(Symbol{
+		Name:  "println",
+		Type:  &FunctionType{Params: []Type{Any}, ReturnType: Void},
+		IsMut: false,
+	})
+	rootScope.Insert(Symbol{
+		Name:  "print",
+		Type:  &FunctionType{Params: []Type{Any}, ReturnType: Void},
+		IsMut: false,
+	})
+
+	return &Checker{
+		errors:         []string{},
+		scope:          rootScope,
+		structRegistry: make(map[string]*StructType),
+	}
+}
+
+func (c *Checker) Errors() []string {
+	return c.errors
+}
+
+func (c *Checker) errorf(pos token.Pos, format string, args ...interface{}) {
+	msg := fmt.Sprintf("[%d:%d] Type Error: %s", pos.Line, pos.Col, fmt.Sprintf(format, args...))
+	c.errors = append(c.errors, msg)
+}
+
+func (c *Checker) Check(program *ast.Program) {
+	// Первый проход: сбор объявлений структур и сигнатур функций
+	for _, stmt := range program.Statements {
+		switch s := stmt.(type) {
+		case *ast.StructDeclaration:
+			fields := make(map[string]Type)
+			for _, f := range s.Fields {
+				fields[f.Name.Value] = ParseType(f.Type, c.structRegistry)
+			}
+			st := &StructType{NameStr: s.Name.Value, Fields: fields}
+			c.structRegistry[s.Name.Value] = st
+
+		case *ast.FnDeclaration:
+			params := make([]Type, len(s.Parameters))
+			for i, p := range s.Parameters {
+				params[i] = ParseType(p.Type, c.structRegistry)
+			}
+			retType := ParseType(s.ReturnType, c.structRegistry)
+			fnType := &FunctionType{Params: params, ReturnType: retType}
+			c.scope.Insert(Symbol{
+				Name:  s.Name.Value,
+				Type:  fnType,
+				IsMut: false,
+				Pos:   s.Pos(),
+			})
+		}
+	}
+
+	// Второй проход: проверка тел операторов и выражений
+	for _, stmt := range program.Statements {
+		c.checkStatement(stmt)
+	}
+}
+
+func (c *Checker) checkStatement(stmt ast.Statement) {
+	switch s := stmt.(type) {
+	case *ast.LetStatement:
+		c.checkLetStatement(s)
+	case *ast.ReturnStatement:
+		c.checkReturnStatement(s)
+	case *ast.ExpressionStatement:
+		c.checkExpression(s.Expression)
+	case *ast.BlockStatement:
+		c.checkBlockStatement(s)
+	case *ast.WhileStatement:
+		c.checkWhileStatement(s)
+	case *ast.ForInStatement:
+		c.checkForInStatement(s)
+	case *ast.FnDeclaration:
+		c.checkFnBody(s)
+	case *ast.StructDeclaration, *ast.BreakStatement, *ast.ContinueStatement:
+		// уже зарегистрировано или тривиально
+	default:
+		// ignore
+	}
+}
+
+func (c *Checker) checkLetStatement(s *ast.LetStatement) {
+	var valType Type = Any
+	if s.Value != nil {
+		valType = c.checkExpression(s.Value)
+	}
+
+	var declaredType Type = Any
+	if s.TypeAnnotation != "" {
+		declaredType = ParseType(s.TypeAnnotation, c.structRegistry)
+		if s.Value != nil && !declaredType.Equals(valType) {
+			c.errorf(s.Pos(), "cannot assign value of type '%s' to variable '%s' of type '%s'",
+				valType.Name(), s.Name.Value, declaredType.Name())
+		}
+	} else {
+		declaredType = valType
+	}
+
+	ok := c.scope.Insert(Symbol{
+		Name:  s.Name.Value,
+		Type:  declaredType,
+		IsMut: s.IsMut,
+		Pos:   s.Pos(),
+	})
+	if !ok {
+		c.errorf(s.Pos(), "variable '%s' is already declared in this scope", s.Name.Value)
+	}
+}
+
+func (c *Checker) checkReturnStatement(s *ast.ReturnStatement) {
+	var actualRet Type = Void
+	if s.ReturnValue != nil {
+		actualRet = c.checkExpression(s.ReturnValue)
+	}
+
+	if c.currentFnRet != nil && !c.currentFnRet.Equals(actualRet) {
+		c.errorf(s.Pos(), "function expects return type '%s', got '%s'",
+			c.currentFnRet.Name(), actualRet.Name())
+	}
+}
+
+func (c *Checker) checkBlockStatement(s *ast.BlockStatement) {
+	prevScope := c.scope
+	c.scope = NewScope(prevScope)
+	defer func() { c.scope = prevScope }()
+
+	for _, stmt := range s.Statements {
+		c.checkStatement(stmt)
+	}
+}
+
+func (c *Checker) checkWhileStatement(s *ast.WhileStatement) {
+	condType := c.checkExpression(s.Condition)
+	if !condType.Equals(Bool) && !condType.Equals(Any) {
+		c.errorf(s.Condition.Pos(), "while condition must be bool, got '%s'", condType.Name())
+	}
+	c.checkBlockStatement(s.Body)
+}
+
+func (c *Checker) checkForInStatement(s *ast.ForInStatement) {
+	iterType := c.checkExpression(s.Iterable)
+
+	prevScope := c.scope
+	c.scope = NewScope(prevScope)
+	defer func() { c.scope = prevScope }()
+
+	var elemType Type = Int
+	if arrType, ok := iterType.(*ArrayType); ok {
+		elemType = arrType.Element
+	}
+
+	c.scope.Insert(Symbol{
+		Name:  s.Item.Value,
+		Type:  elemType,
+		IsMut: false,
+		Pos:   s.Item.Pos(),
+	})
+
+	for _, stmt := range s.Body.Statements {
+		c.checkStatement(stmt)
+	}
+}
+
+func (c *Checker) checkFnBody(s *ast.FnDeclaration) {
+	retType := ParseType(s.ReturnType, c.structRegistry)
+	prevRet := c.currentFnRet
+	c.currentFnRet = retType
+	defer func() { c.currentFnRet = prevRet }()
+
+	prevScope := c.scope
+	c.scope = NewScope(prevScope)
+	defer func() { c.scope = prevScope }()
+
+	for _, param := range s.Parameters {
+		pType := ParseType(param.Type, c.structRegistry)
+		c.scope.Insert(Symbol{
+			Name:  param.Name.Value,
+			Type:  pType,
+			IsMut: false,
+			Pos:   param.Name.Pos(),
+		})
+	}
+
+	for _, stmt := range s.Body.Statements {
+		c.checkStatement(stmt)
+	}
+}
+
+func (c *Checker) checkExpression(expr ast.Expression) Type {
+	if expr == nil {
+		return Void
+	}
+
+	switch e := expr.(type) {
+	case *ast.IntegerLiteral:
+		return Int
+	case *ast.FloatLiteral:
+		return Float
+	case *ast.BooleanLiteral:
+		return Bool
+	case *ast.StringLiteral:
+		return Str
+	case *ast.FStringLiteral:
+		for _, part := range e.Parts {
+			c.checkExpression(part)
+		}
+		return Str
+	case *ast.NoneLiteral:
+		return &OptionType{Inner: Any}
+	case *ast.SomeExpression:
+		valT := c.checkExpression(e.Value)
+		return &OptionType{Inner: valT}
+
+	case *ast.Identifier:
+		if e.Value == "fs" || e.Value == "os" || e.Value == "Map" || e.Value == "_" {
+			return Any
+		}
+		sym, found := c.scope.Lookup(e.Value)
+		if !found {
+			c.errorf(e.Pos(), "undefined identifier '%s'", e.Value)
+			return Any
+		}
+		return sym.Type
+
+	case *ast.PrefixExpression:
+		rightT := c.checkExpression(e.Right)
+		if e.Operator == "!" {
+			if !rightT.Equals(Bool) && !rightT.Equals(Any) {
+				c.errorf(e.Pos(), "operator '!' cannot be applied to type '%s'", rightT.Name())
+			}
+			return Bool
+		} else if e.Operator == "-" {
+			if !rightT.Equals(Int) && !rightT.Equals(Float) && !rightT.Equals(Any) {
+				c.errorf(e.Pos(), "operator '-' cannot be applied to type '%s'", rightT.Name())
+			}
+			return rightT
+		}
+		return rightT
+
+	case *ast.InfixExpression:
+		leftT := c.checkExpression(e.Left)
+		rightT := c.checkExpression(e.Right)
+
+		switch e.Operator {
+		case "+", "-", "*", "/", "%":
+			if e.Operator == "+" && (leftT.Equals(Str) || rightT.Equals(Str)) {
+				return Str
+			}
+			if !leftT.Equals(rightT) && !leftT.Equals(Any) && !rightT.Equals(Any) {
+				c.errorf(e.Pos(), "mismatched types in operator '%s': '%s' and '%s'",
+					e.Operator, leftT.Name(), rightT.Name())
+			}
+			return leftT
+		case "==", "!=":
+			return Bool
+		case "<", "<=", ">", ">=":
+			return Bool
+		case "&&", "||":
+			if (!leftT.Equals(Bool) && !leftT.Equals(Any)) || (!rightT.Equals(Bool) && !rightT.Equals(Any)) {
+				c.errorf(e.Pos(), "logical operator '%s' requires bool operands", e.Operator)
+			}
+			return Bool
+		default:
+			return Any
+		}
+
+	case *ast.AssignExpression:
+		leftT := c.checkExpression(e.Left)
+		rightT := c.checkExpression(e.Value)
+
+		// Проверка мутабельности переменной
+		if ident, ok := e.Left.(*ast.Identifier); ok {
+			sym, found := c.scope.Lookup(ident.Value)
+			if found && !sym.IsMut {
+				c.errorf(e.Pos(), "cannot assign twice to immutable variable '%s' (declare it with 'let mut')", ident.Value)
+			}
+		}
+
+		if !leftT.Equals(rightT) && !leftT.Equals(Any) && !rightT.Equals(Any) {
+			c.errorf(e.Pos(), "cannot assign '%s' to '%s'", rightT.Name(), leftT.Name())
+		}
+		return leftT
+
+	case *ast.RangeExpression:
+		startT := c.checkExpression(e.Start)
+		endT := c.checkExpression(e.End)
+		if !startT.Equals(Int) || !endT.Equals(Int) {
+			c.errorf(e.Pos(), "range bounds must be integers")
+		}
+		return &ArrayType{Element: Int}
+
+	case *ast.ArrayLiteral:
+		var elemT Type = Any
+		if len(e.Elements) > 0 {
+			elemT = c.checkExpression(e.Elements[0])
+			for i := 1; i < len(e.Elements); i++ {
+				t := c.checkExpression(e.Elements[i])
+				if !elemT.Equals(t) {
+					c.errorf(e.Elements[i].Pos(), "array elements must have same type, expected '%s', got '%s'",
+						elemT.Name(), t.Name())
+				}
+			}
+		}
+		return &ArrayType{Element: elemT}
+
+	case *ast.IndexExpression:
+		leftT := c.checkExpression(e.Left)
+		idxT := c.checkExpression(e.Index)
+		if !idxT.Equals(Int) && !idxT.Equals(Any) {
+			c.errorf(e.Index.Pos(), "index must be int, got '%s'", idxT.Name())
+		}
+		if arrT, ok := leftT.(*ArrayType); ok {
+			return arrT.Element
+		}
+		return Any
+
+	case *ast.DotExpression:
+		// Проверяем вызовы модулей: fs, os, Map
+		if ident, ok := e.Left.(*ast.Identifier); ok {
+			switch ident.Value {
+			case "fs":
+				switch e.Right.Value {
+				case "read_file":
+					return &FunctionType{Params: []Type{Str}, ReturnType: &OptionType{Inner: Str}}
+				case "write_file":
+					return &FunctionType{Params: []Type{Str, Str}, ReturnType: Bool}
+				}
+			case "os":
+				switch e.Right.Value {
+				case "args":
+					return &FunctionType{Params: []Type{}, ReturnType: &ArrayType{Element: Str}}
+				}
+			case "Map":
+				switch e.Right.Value {
+				case "new":
+					return &FunctionType{Params: []Type{}, ReturnType: &MapType{Key: Any, Value: Any}}
+				}
+			}
+		}
+
+		leftT := c.checkExpression(e.Left)
+		if st, ok := leftT.(*StructType); ok {
+			if fType, exists := st.Fields[e.Right.Value]; exists {
+				return fType
+			}
+			c.errorf(e.Pos(), "field '%s' does not exist on struct '%s'", e.Right.Value, st.NameStr)
+			return Any
+		}
+
+		// Методы массивов
+		if arrT, ok := leftT.(*ArrayType); ok {
+			switch e.Right.Value {
+			case "push":
+				return &FunctionType{Params: []Type{arrT.Element}, ReturnType: Void}
+			case "pop":
+				return &FunctionType{Params: []Type{}, ReturnType: &OptionType{Inner: arrT.Element}}
+			case "len":
+				return &FunctionType{Params: []Type{}, ReturnType: Int}
+			case "clear":
+				return &FunctionType{Params: []Type{}, ReturnType: Void}
+			}
+		}
+
+		// Методы строк
+		if leftT.Equals(Str) {
+			switch e.Right.Value {
+			case "len":
+				return &FunctionType{Params: []Type{}, ReturnType: Int}
+			case "sub":
+				return &FunctionType{Params: []Type{Int, Int}, ReturnType: Str}
+			case "char_at":
+				return &FunctionType{Params: []Type{Int}, ReturnType: Int}
+			case "contains":
+				return &FunctionType{Params: []Type{Str}, ReturnType: Bool}
+			}
+		}
+
+		// Методы словарей
+		if mapT, ok := leftT.(*MapType); ok {
+			switch e.Right.Value {
+			case "set":
+				return &FunctionType{Params: []Type{mapT.Key, mapT.Value}, ReturnType: Void}
+			case "get":
+				return &FunctionType{Params: []Type{mapT.Key}, ReturnType: &OptionType{Inner: mapT.Value}}
+			case "has":
+				return &FunctionType{Params: []Type{mapT.Key}, ReturnType: Bool}
+			case "len":
+				return &FunctionType{Params: []Type{}, ReturnType: Int}
+			}
+		}
+
+		return Any
+
+	case *ast.CallExpression:
+		fnT := c.checkExpression(e.Function)
+		for _, arg := range e.Arguments {
+			c.checkExpression(arg)
+		}
+		if ft, ok := fnT.(*FunctionType); ok {
+			return ft.ReturnType
+		}
+		return Any
+
+	case *ast.StructLiteral:
+		st, ok := c.structRegistry[e.StructName.Value]
+		if !ok {
+			c.errorf(e.Pos(), "undefined struct '%s'", e.StructName.Value)
+			return Any
+		}
+		for _, field := range e.Fields {
+			expectedType, exists := st.Fields[field.Name]
+			if !exists {
+				c.errorf(e.Pos(), "struct '%s' has no field '%s'", st.NameStr, field.Name)
+				continue
+			}
+			valType := c.checkExpression(field.Value)
+			if !expectedType.Equals(valType) && !valType.Equals(Any) {
+				c.errorf(field.Value.Pos(), "field '%s' expects type '%s', got '%s'",
+					field.Name, expectedType.Name(), valType.Name())
+			}
+		}
+		return st
+
+	case *ast.IfExpression:
+		condT := c.checkExpression(e.Condition)
+		if !condT.Equals(Bool) && !condT.Equals(Any) {
+			c.errorf(e.Condition.Pos(), "if condition must be bool, got '%s'", condT.Name())
+		}
+		c.checkBlockStatement(e.Consequence)
+		if e.Alternative != nil {
+			c.checkBlockStatement(e.Alternative)
+		}
+		return Void
+
+	case *ast.MatchExpression:
+		valT := c.checkExpression(e.Value)
+		for _, mc := range e.Cases {
+			caseScope := NewScope(c.scope)
+			prevScope := c.scope
+			c.scope = caseScope
+
+			c.bindPatternVariables(mc.Pattern, valT)
+
+			_ = c.checkExpression(mc.Body)
+			c.scope = prevScope
+		}
+		return Any
+	}
+
+	return Any
+}
+
+func (c *Checker) bindPatternVariables(pat ast.Expression, targetType Type) {
+	switch p := pat.(type) {
+	case *ast.Identifier:
+		if p.Value != "_" {
+			c.scope.Insert(Symbol{
+				Name:  p.Value,
+				Type:  targetType,
+				IsMut: false,
+				Pos:   p.Pos(),
+			})
+		}
+	case *ast.SomeExpression:
+		var innerType Type = Any
+		if optType, ok := targetType.(*OptionType); ok {
+			innerType = optType.Inner
+		}
+		c.bindPatternVariables(p.Value, innerType)
+	}
+}

@@ -1,0 +1,24 @@
+# Binaries and compiled outputs
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.a
+
+# Temporary compiler artifacts
+*.tmp.c
+*.necto.tmp.c
+*.aura.tmp.c
+
+# Test and run outputs
+sample_data.txt
+fib_native.exe
+structs_native.exe
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
