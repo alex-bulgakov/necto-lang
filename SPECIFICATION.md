@@ -1,7 +1,7 @@
-# Официальная спецификация языка программирования Necto 1.2 (Стандарт)
+# Официальная спецификация языка программирования Necto 2.0 (Стандарт)
 
 > **Статус документа:** Официальный стандарт языка и эталонное руководство  
-> **Версия языка:** `1.2.0`  
+> **Версия языка:** `2.0.0 (Pure Self-Hosting & Embedded Toolchain)`  
 > **Последнее обновление:** 2026-09-03  
 
 ---
@@ -411,6 +411,7 @@ http.listen(8080, handle)
 * `necto bench [file.nc] [--runs N]` — запуск блоков производительности `bench` с замером ns/op и ops/sec.
 * `necto doc [target] [--serve]` — автоматическая генерация интерактивного сайта документации API.
 * `necto install` — установка и обновление внешних зависимостей из `necto.json` в каталог `.necto/deps/`.
+* `necto toolchain [status|install]` — проверка и настройка встроенного C/LLVM бэкенда Clang.
 * `necto check [file.nc]` — статический синтаксический и семантический анализ типов без выполнения.
 * `necto repl` — интерактивная оболочка REPL.
 * `necto version` — версия тулчейна.
@@ -422,16 +423,18 @@ http.listen(8080, handle)
 * `compiler/ast.nc` — рекурсивное AST-дерево (`enum Expr`, `enum Stmt`, `Box[T]`, `ImplBlock`, `MethodCall`).
 * `compiler/parser.nc` — синтаксический анализатор рекурсивного спуска (`struct Parser`) с поддержкой структур, методов и операторов присваивания.
 * `compiler/codegen.nc` — генератор C/LLVM машинного рантайма (`struct Codegen`).
-* `compiler/main.nc` — CLI интерфейс самохостингового компилятора с поддержкой `os.args()` и `fs.read_file()`.
+* `compiler/main.nc` — CLI интерфейс самохостингового компилятора с поддержкой `os.args()`, `fs.read_file()` и прямым вызовом C FFI `system()`.
 
 #### Стадии самохостинга (Self-Hosting Pipeline):
 1. **Stage 1 (Pure Necto Implementation):** Вся кодовая база компилятора написана на 100% чистом Necto.
 2. **Stage 2 (Native Bootstrap):** Команда `necto bootstrap` компилирует `compiler/*.nc` в автономный нативный бинарник `bin/necto-native.exe`.
 3. **Stage 3 (Full Independence):** Бинарник `bin/necto-native.exe` способен автономно принимать и компилировать произвольные программы Necto из командной строки без зависимости от рантайма Go.
 
-Автономная сборка компилятора:
+Автономная сборка компилятора без Go:
 ```powershell
-necto bootstrap
+.\bootstrap.ps1
+# или на Windows CMD:
+.\bootstrap.bat
 ```
 
 ### 6.3. Манифест проекта `necto.json`
@@ -475,6 +478,16 @@ necto install
 * Клонирует указанные ветки/теги в изолированный каталог `.necto/deps/<package_name>/`.
 * При повторном запуске производит быстрое обновление (`git pull --ff-only`).
 * Информирует о количестве загруженных исходных файлов Necto.
+
+### 6.6. Встроенный бэкенд компилятора Clang/LLVM и управление тулчейном (`necto toolchain`)
+Для создания независимых исполняемых файлов `.exe` компилятор Necto использует многоуровневое обнаружение бэкенда Clang/LLVM:
+1. **Локальный каталог тулчейна Necto:** `bin/clang/bin/clang.exe` или `toolchain/clang/bin/clang.exe`.
+2. **Пользовательский изолированный тулчейн:** `~/.necto/toolchain/clang/bin/clang.exe`.
+3. **Системный компилятор из переменной среды PATH:** системные `clang` или `gcc`.
+
+Команды управления тулчейном:
+* `necto toolchain status` — отображение активного компилятора и его источника (`bundled`, `isolated-toolchain`, `system-clang`).
+* `necto toolchain install` — настройка изолированного портативного каталога тулчейна.
 
 ---
 

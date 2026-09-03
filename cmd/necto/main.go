@@ -21,7 +21,7 @@ import (
 	"necto/pkg/types"
 )
 
-const VERSION = "1.2.0"
+const VERSION = "2.0.0"
 
 type ProjectConfig struct {
 	Name         string            `json:"name"`
@@ -43,6 +43,7 @@ func printUsage() {
 	fmt.Println("  necto bench [file.nc] [--runs] Run benchmarks in file or tests/ directory")
 	fmt.Println("  necto doc [file/dir] [--serve] Generate interactive HTML documentation")
 	fmt.Println("  necto install                  Install dependencies from necto.json")
+	fmt.Println("  necto toolchain [status/inst]  Check or manage embedded C/LLVM backend compiler")
 	fmt.Println("  necto build [file.nc] -o <out> Compile Necto program to native binary")
 	fmt.Println("  necto bootstrap                Compile self-hosted compiler to bin/necto-native.exe (Stage 2)")
 	fmt.Println("  necto check [file.nc]          Type check program without executing")
@@ -207,6 +208,13 @@ func main() {
 
 	case "install":
 		installDeps()
+
+	case "toolchain":
+		action := "status"
+		if len(os.Args) >= 3 {
+			action = os.Args[2]
+		}
+		handleToolchain(action)
 
 	case "repl":
 		startRepl()
@@ -572,14 +580,12 @@ func runBootstrap() {
 
 	os.MkdirAll("bin", 0755)
 	nativeOut := filepath.Join("bin", "necto-native.exe")
-	compilerPath, err := exec.LookPath("clang")
+	compilerPath, sourceKind, err := codegen.FindClangCompiler()
 	if err != nil {
-		compilerPath, err = exec.LookPath("gcc")
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Error: neither clang nor gcc found in PATH")
-			os.Exit(1)
-		}
+		fmt.Fprintf(os.Stderr, "Error: no C compiler backend found: %s\n", err)
+		os.Exit(1)
 	}
+	fmt.Printf("Using backend compiler: %s (%s)\n", compilerPath, sourceKind)
 
 	cmd := exec.Command(compilerPath, "-O2", tmpC, "-o", nativeOut)
 	out, err := cmd.CombinedOutput()
@@ -1113,3 +1119,61 @@ func installDeps() {
 		}
 	}
 }
+
+func handleToolchain(action string) {
+	switch action {
+	case "status":
+		path, source, err := codegen.FindClangCompiler()
+		fmt.Println("==================================================================")
+		fmt.Println("             Necto C/LLVM Backend Toolchain Status                ")
+		fmt.Println("==================================================================")
+		if err != nil {
+			fmt.Println("Status: ✗ No C compiler backend found")
+			fmt.Println("Searched locations:")
+			fmt.Println("  1. Bundled toolchain: ./bin/clang/bin/clang.exe or ./toolchain/clang/")
+			fmt.Println("  2. Isolated user toolchain: ~/.necto/toolchain/clang/bin/clang.exe")
+			fmt.Println("  3. System PATH: clang or gcc")
+			fmt.Println("\nRun 'necto toolchain install' to setup an isolated portable toolchain.")
+		} else {
+			fmt.Println("Status:    ✓ Ready for native AOT compilation (necto build)")
+			fmt.Printf("Compiler:  %s\n", path)
+			fmt.Printf("Source:    %s\n", source)
+		}
+		fmt.Println("==================================================================")
+
+	case "install", "setup":
+		installToolchain()
+
+	default:
+		fmt.Printf("Unknown toolchain action '%s'. Supported: status, install\n", action)
+	}
+}
+
+func installToolchain() {
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error determining user home directory: %s\n", err)
+		return
+	}
+
+	targetDir := filepath.Join(userHome, ".necto", "toolchain", "clang")
+	os.MkdirAll(targetDir, 0755)
+
+	fmt.Println("==================================================================")
+	fmt.Println("             Necto Embedded Toolchain Setup                       ")
+	fmt.Println("==================================================================")
+	fmt.Printf("Target directory: %s\n\n", targetDir)
+
+	// Check if already available
+	if currentPath, source, err := codegen.FindClangCompiler(); err == nil {
+		fmt.Printf("✓ Active compiler already detected: %s (%s)\n", currentPath, source)
+		fmt.Println("Your system is already configured for native compilation!")
+		return
+	}
+
+	fmt.Println("Configuring isolated toolchain directory...")
+	fmt.Println("To complete standalone offline toolchain setup, copy or symlink")
+	fmt.Printf("your portable clang distribution to: %s\n", targetDir)
+	fmt.Println("==================================================================")
+}
+

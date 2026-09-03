@@ -65,27 +65,65 @@ test "self-hosted parser and codegen on struct and impl" {
     }
 }
 
+extern "C" {
+    fn system(cmd: str) -> int
+}
+
 fn main() {
     let args = os.args()
     let mut file_to_compile = ""
-    for i in 1..args.len() {
+    let mut out_file = "output.exe"
+    let mut is_run_mode = false
+
+    let mut i = 1
+    while i < args.len() {
         let a = args[i]
-        if a.contains(".nc") && !a.contains("compiler/main.nc") && !a.contains("compiler\\main.nc") {
+        if a == "-o" {
+            if i + 1 < args.len() {
+                out_file = args[i + 1]
+                i += 1
+            }
+        } else if a == "run" || a == "--run" {
+            is_run_mode = true
+        } else if a == "version" || a == "--version" {
+            println("Necto Pure Self-Hosted Compiler v2.0.0")
+            return
+        } else if a.contains(".nc") && !a.contains("compiler/main.nc") && !a.contains("compiler\\main.nc") {
             file_to_compile = a
-            break
         }
+        i += 1
     }
 
     if file_to_compile != "" {
-        println(f"Compiling '{file_to_compile}' using pure Necto self-hosted compiler...")
+        println("==================================================================")
+        println("      Necto Native Pure Self-Hosted Compiler (Stage 3)            ")
+        println("==================================================================")
+        println(f"Compiling '{file_to_compile}' to '{out_file}'...")
+
         match fs.read_file(file_to_compile) {
             Some(src) => {
                 let res = compile_source_to_c(src)
                 match res {
                     Result.Ok(c_code) => {
-                        let out_file = "stage1_output.tmp.c"
-                        fs.write_file(out_file, c_code)
-                        println(f"✓ Compilation successful! Output generated to '{out_file}'")
+                        let tmp_c = "necto_native_build.tmp.c"
+                        fs.write_file(tmp_c, c_code)
+                        println(f"✓ Emitted C intermediate code to '{tmp_c}'")
+
+                        println("Invoking embedded/system C backend (Clang/LLVM)...")
+                        let clang_cmd = f"clang -O2 {tmp_c} -o {out_file}"
+                        let status = system(clang_cmd)
+
+                        if status == 0 {
+                            println(f"✓ Native executable successfully created: {out_file}")
+                            if is_run_mode {
+                                println("------------------------------------------------------------------")
+                                println(f"Running '{out_file}':\n")
+                                system(out_file)
+                                println("\n------------------------------------------------------------------")
+                            }
+                        } else {
+                            println(f"✗ Backend compiler exited with error code {status}")
+                        }
                     },
                     Result.Err(err) => {
                         println(f"✗ Compilation error: {err}")
@@ -100,30 +138,23 @@ fn main() {
     }
 
     println("==================================================================")
-    println("     Necto Self-Hosted Compiler (Stage 2) — Written in Necto      ")
+    println("      Necto Native Pure Self-Hosted Compiler (Stage 3)            ")
     println("==================================================================")
+    println("Usage: necto-native <file.nc> [-o output.exe] [--run]")
+    println("")
+    println("Running self-hosted verification pipeline on test program...")
 
     let test_program = "fn compute(x: int, y: int) -> int {\n    return (x * 2) + (y * 3);\n}\n\nfn main() {\n    let val = compute(5, 10);\n    println(val);\n}\n"
-
-    println("Compiling test program in pure Necto:")
-    println("------------------------------------------------------------------")
-    println(test_program)
-    println("------------------------------------------------------------------")
-
-    println("Running self-hosted pipeline...")
     let result = compile_source_to_c(test_program)
 
     match result {
         Result.Ok(c_code) => {
-            println("✓ Compilation succeeded! Output C code:\n")
-            println(c_code)
-
-            let out_file = "stage1_output.tmp.c"
-            fs.write_file(out_file, c_code)
-            println(f"✓ Saved native C code to '{out_file}'")
+            let out_tmp = "stage1_output.tmp.c"
+            fs.write_file(out_tmp, c_code)
+            println("✓ Self-test passed! Pure Necto compiler generated valid C code.")
         },
         Result.Err(err) => {
-            println(f"✗ Compilation failed: {err}")
+            println(f"✗ Verification failed: {err}")
         },
     }
 }

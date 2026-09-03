@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -1593,6 +1594,18 @@ func callExternC(fnName string, args []Object) Object {
 				os.Exit(int(i.Value))
 			}
 			os.Exit(0)
+		}
+	case "system":
+		if len(args) == 1 {
+			cmdStr := args[0].Inspect()
+			cmd := exec.Command("cmd", "/C", cmdStr)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				return &Integer{Value: 1}
+			}
+			return &Integer{Value: 0}
 		}
 	}
 	return NULL

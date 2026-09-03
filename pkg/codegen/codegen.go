@@ -435,7 +435,49 @@ func (c *Compiler) inferCType(expr ast.Expression) string {
 	return "int64_t"
 }
 
-// BuildNativeExecutable компилирует AST в C код, а затем вызывает Clang для получения .exe
+// FindClangCompiler выполняет многоуровневый поиск компилятора:
+// 1. Локальный встроенный каталог рядом с necto.exe (bin/clang, toolchain/clang)
+// 2. Пользовательский изолированный каталог ~/.necto/toolchain/clang/bin/clang.exe
+// 3. Системный clang или gcc из PATH
+func FindClangCompiler() (string, string, error) {
+	// 1. Проверяем рядом с текущим исполняемым файлом Necto
+	if exePath, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exePath)
+		candidates := []string{
+			filepath.Join(exeDir, "clang", "bin", "clang.exe"),
+			filepath.Join(exeDir, "clang.exe"),
+			filepath.Join(exeDir, "..", "toolchain", "clang", "bin", "clang.exe"),
+			filepath.Join(".", "bin", "clang", "bin", "clang.exe"),
+			filepath.Join(".", "toolchain", "clang", "bin", "clang.exe"),
+		}
+		for _, cand := range candidates {
+			if info, err := os.Stat(cand); err == nil && !info.IsDir() {
+				return cand, "bundled", nil
+			}
+		}
+	}
+
+	// 2. Проверяем пользовательский изолированный каталог ~/.necto/toolchain/
+	userHome, err := os.UserHomeDir()
+	if err == nil {
+		toolchainClang := filepath.Join(userHome, ".necto", "toolchain", "clang", "bin", "clang.exe")
+		if info, err := os.Stat(toolchainClang); err == nil && !info.IsDir() {
+			return toolchainClang, "isolated-toolchain", nil
+		}
+	}
+
+	// 3. Проверяем системный PATH
+	if p, err := exec.LookPath("clang"); err == nil {
+		return p, "system-clang", nil
+	}
+	if p, err := exec.LookPath("gcc"); err == nil {
+		return p, "system-gcc", nil
+	}
+
+	return "", "", fmt.Errorf("no C compiler backend found (checked bundled paths, ~/.necto/toolchain/ and system PATH)")
+}
+
+// BuildNativeExecutable компилирует AST в C код, а затем вызывает найденный Clang/GCC для получения .exe
 func BuildNativeExecutable(program *ast.Program, outputPath string) error {
 	cCompiler := NewCompiler()
 	cCode, err := cCompiler.CompileToC(program)
@@ -451,19 +493,16 @@ func BuildNativeExecutable(program *ast.Program, outputPath string) error {
 	}
 	defer os.Remove(tmpC)
 
-	// Ищем clang или gcc
-	compilerPath, err := exec.LookPath("clang")
+	// Ищем компилятор бэкенда через многоуровневый поиск
+	compilerPath, sourceKind, err := FindClangCompiler()
 	if err != nil {
-		compilerPath, err = exec.LookPath("gcc")
-		if err != nil {
-			return fmt.Errorf("neither clang nor gcc found in PATH")
-		}
+		return fmt.Errorf("%w. Run 'necto toolchain install clang' or install Clang", err)
 	}
 
 	cmd := exec.Command(compilerPath, "-O2", tmpC, "-o", outputPath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("native compilation failed:\n%s\n%w", string(out), err)
+		return fmt.Errorf("native compilation failed via %s (%s):\n%s\n%w", compilerPath, sourceKind, string(out), err)
 	}
 
 	return nil
