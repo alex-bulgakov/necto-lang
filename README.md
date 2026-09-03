@@ -18,6 +18,9 @@
   - Компонент 2: Синтаксический AST-парсер на чистом Necto ([`examples/08_mini_parser.nc`](file:///d:/Projects/newLanguage/examples/08_mini_parser.nc)).
   - Компонент 3: **Сквозной пайплайн компилятора на чистом Necto (Lexer $\rightarrow$ Parser $\rightarrow$ Codegen)** ([`examples/10_self_compiler_pipeline.nc`](file:///d:/Projects/newLanguage/examples/10_self_compiler_pipeline.nc))!
 
+- **Официальная документация:**
+  - Полная спецификация языка: [**`SPECIFICATION.md`**](SPECIFICATION.md)
+
 ---
 
 ## 🚀 Быстрый старт
