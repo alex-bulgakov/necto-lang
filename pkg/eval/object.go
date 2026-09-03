@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"necto/pkg/ast"
 )
@@ -12,26 +13,27 @@ import (
 type ObjectType string
 
 const (
-	INTEGER_OBJ     = "INTEGER"
-	FLOAT_OBJ       = "FLOAT"
-	BOOLEAN_OBJ     = "BOOLEAN"
-	STRING_OBJ      = "STRING"
-	NULL_OBJ        = "NULL"
+	INTEGER_OBJ      = "INTEGER"
+	FLOAT_OBJ        = "FLOAT"
+	BOOLEAN_OBJ      = "BOOLEAN"
+	STRING_OBJ       = "STRING"
+	NULL_OBJ         = "NULL"
 	RETURN_VALUE_OBJ = "RETURN_VALUE"
-	BREAK_OBJ       = "BREAK"
-	CONTINUE_OBJ    = "CONTINUE"
-	ERROR_OBJ       = "ERROR"
-	FUNCTION_OBJ    = "FUNCTION"
-	BUILTIN_OBJ     = "BUILTIN"
-	ARRAY_OBJ       = "ARRAY"
-	OPTION_OBJ      = "OPTION"
-	STRUCT_OBJ      = "STRUCT"
-	MAP_OBJ         = "MAP"
-	MODULE_OBJ      = "MODULE"
-	BOX_OBJ         = "BOX"
-	ENUM_OBJ        = "ENUM"
-	RESULT_OBJ      = "RESULT"
-	STRUCT_DEF_OBJ  = "STRUCT_DEF"
+	BREAK_OBJ        = "BREAK"
+	CONTINUE_OBJ     = "CONTINUE"
+	ERROR_OBJ        = "ERROR"
+	FUNCTION_OBJ     = "FUNCTION"
+	BUILTIN_OBJ      = "BUILTIN"
+	ARRAY_OBJ        = "ARRAY"
+	OPTION_OBJ       = "OPTION"
+	STRUCT_OBJ       = "STRUCT"
+	MAP_OBJ          = "MAP"
+	MODULE_OBJ       = "MODULE"
+	BOX_OBJ          = "BOX"
+	ENUM_OBJ         = "ENUM"
+	RESULT_OBJ       = "RESULT"
+	STRUCT_DEF_OBJ   = "STRUCT_DEF"
+	CHANNEL_OBJ      = "CHANNEL"
 )
 
 type Object interface {
@@ -240,3 +242,12 @@ type StructDefinition struct {
 
 func (s *StructDefinition) Type() ObjectType { return STRUCT_DEF_OBJ }
 func (s *StructDefinition) Inspect() string  { return "struct " + s.Name }
+
+type ChannelInstance struct {
+	Ch     chan Object
+	Closed bool
+	mu     sync.Mutex
+}
+
+func (c *ChannelInstance) Type() ObjectType { return CHANNEL_OBJ }
+func (c *ChannelInstance) Inspect() string  { return "<channel>" }

@@ -112,6 +112,24 @@ var modules = map[string]*Module{
 			},
 		},
 	},
+	"Channel": {
+		Name: "Channel",
+		Methods: map[string]*Builtin{
+			"new": {
+				Fn: func(args ...Object) Object {
+					capacity := 0
+					if len(args) > 0 {
+						if capInt, ok := args[0].(*Integer); ok {
+							capacity = int(capInt.Value)
+						}
+					}
+					return &ChannelInstance{
+						Ch: make(chan Object, capacity),
+					}
+				},
+			},
+		},
+	},
 }
 
 func init() {
@@ -214,6 +232,21 @@ func init() {
 			},
 		},
 	}
+
+	// Register spawn in init() because it references applyFunction (avoiding init cycle)
+	builtins["spawn"] = &Builtin{
+		Fn: func(args ...Object) Object {
+			if len(args) < 1 {
+				return newError("spawn() takes at least 1 argument (function)")
+			}
+			fnObj := args[0]
+			fnArgs := args[1:]
+			go func() {
+				applyFunction(fnObj, fnArgs)
+			}()
+			return TRUE
+		},
+	}
 }
 
 var builtins = map[string]*Builtin{
@@ -233,6 +266,17 @@ var builtins = map[string]*Builtin{
 				val = args[0]
 			}
 			return &ResultInstance{IsErr: true, Value: val}
+		},
+	},
+	"sleep": {
+		Fn: func(args ...Object) Object {
+			if len(args) < 1 {
+				return newError("sleep() takes 1 argument (milliseconds)")
+			}
+			if ms, ok := args[0].(*Integer); ok {
+				time.Sleep(time.Duration(ms.Value) * time.Millisecond)
+			}
+			return NULL
 		},
 	},
 	"assert": {
@@ -1311,6 +1355,48 @@ func evalDotExpression(left Object, prop string, env ...*Environment) Object {
 			return &Builtin{
 				Fn: func(args ...Object) Object {
 					return &Integer{Value: int64(len(obj.Store))}
+				},
+			}
+		}
+
+	case *ChannelInstance:
+		switch prop {
+		case "send":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("channel.send() takes 1 argument")
+					}
+					obj.mu.Lock()
+					closed := obj.Closed
+					obj.mu.Unlock()
+					if closed {
+						return newError("cannot send on closed channel")
+					}
+					obj.Ch <- args[0]
+					return NULL
+				},
+			}
+		case "recv":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					val, ok := <-obj.Ch
+					if !ok {
+						return NONE
+					}
+					return &Option{HasValue: true, Value: val}
+				},
+			}
+		case "close":
+			return &Builtin{
+				Fn: func(args ...Object) Object {
+					obj.mu.Lock()
+					defer obj.mu.Unlock()
+					if !obj.Closed {
+						obj.Closed = true
+						close(obj.Ch)
+					}
+					return NULL
 				},
 			}
 		}

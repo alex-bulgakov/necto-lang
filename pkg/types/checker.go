@@ -71,6 +71,16 @@ func NewChecker() *Checker {
 		Type:  &FunctionType{Params: []Type{Bool}, ReturnType: Void},
 		IsMut: false,
 	})
+	rootScope.Insert(Symbol{
+		Name:  "spawn",
+		Type:  &FunctionType{Params: []Type{Any}, ReturnType: Bool},
+		IsMut: false,
+	})
+	rootScope.Insert(Symbol{
+		Name:  "sleep",
+		Type:  &FunctionType{Params: []Type{Int}, ReturnType: Void},
+		IsMut: false,
+	})
 
 	enumRegistry := make(map[string]*EnumType)
 	enumRegistry["Result"] = &EnumType{
@@ -545,6 +555,10 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 			case "Box":
 				if e.Right.Value == "new" {
 					return &FunctionType{Params: []Type{Any}, ReturnType: &BoxType{Inner: Any}}
+				}
+			case "Channel":
+				if e.Right.Value == "new" {
+					return &FunctionType{Params: []Type{Int}, ReturnType: Any}
 				}
 			}
 
