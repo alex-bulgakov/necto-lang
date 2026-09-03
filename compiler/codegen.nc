@@ -133,6 +133,13 @@ impl Codegen {
             },
             Expr.MethodCall(obj, method, args) => {
                 let o = self.emit_expr(obj.unwrap())
+                if method == "push" && args.len() == 1 {
+                    let v = self.emit_expr(args[0])
+                    return f"necto_push_array({o}, (long long)({v}))"
+                }
+                if method == "len" && args.len() == 0 {
+                    return f"(long long)({o}->len)"
+                }
                 let mut arg_strs: [str] = [o]
                 for i in 0..args.len() {
                     arg_strs.push(self.emit_expr(args[i]))
@@ -259,6 +266,18 @@ impl Codegen {
         code += "#include <stdlib.h>\n"
         code += "#include <stdbool.h>\n"
         code += "#include <string.h>\n\n"
+        code += "typedef struct { long long* data; size_t len; size_t cap; } NectoIntArray;\n"
+        code += "static inline NectoIntArray* necto_new_array(size_t cap) {\n"
+        code += "    if (cap == 0) cap = 4;\n"
+        code += "    NectoIntArray* a = (NectoIntArray*)malloc(sizeof(NectoIntArray));\n"
+        code += "    a->data = (long long*)malloc(sizeof(long long) * cap);\n"
+        code += "    a->len = 0; a->cap = cap;\n"
+        code += "    return a;\n"
+        code += "}\n"
+        code += "static inline void necto_push_array(NectoIntArray* a, long long v) {\n"
+        code += "    if (a->len >= a->cap) { a->cap *= 2; a->data = (long long*)realloc(a->data, sizeof(long long) * a->cap); }\n"
+        code += "    a->data[a->len++] = v;\n"
+        code += "}\n\n"
 
         // Сначала генерируем функции
         for i in 0..stmts.len() {

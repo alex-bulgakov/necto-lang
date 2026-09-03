@@ -43,6 +43,61 @@ func (c *Compiler) CompileToC(program *ast.Program) (string, error) {
 	c.writeLine("static inline void necto_println_str(const char* v) { printf(\"%s\\n\", v); }")
 	c.writeLine("static inline void necto_println_bool(bool v) { printf(\"%s\\n\", v ? \"true\" : \"false\"); }")
 	c.writeLine("")
+	c.writeLine("// --- Necto Arena Memory Allocator ---")
+	c.writeLine("typedef struct NectoArenaPage {")
+	c.writeLine("    struct NectoArenaPage* next;")
+	c.writeLine("    size_t offset;")
+	c.writeLine("    size_t capacity;")
+	c.writeLine("    char memory[1];")
+	c.writeLine("} NectoArenaPage;")
+	c.writeLine("")
+	c.writeLine("typedef struct {")
+	c.writeLine("    NectoArenaPage* current;")
+	c.writeLine("    size_t page_size;")
+	c.writeLine("} NectoArena;")
+	c.writeLine("")
+	c.writeLine("static NectoArena* g_necto_global_arena = NULL;")
+	c.writeLine("")
+	c.writeLine("static inline NectoArena* necto_arena_create(size_t page_size) {")
+	c.writeLine("    if (page_size == 0) page_size = 64 * 1024;")
+	c.writeLine("    NectoArena* arena = (NectoArena*)malloc(sizeof(NectoArena));")
+	c.writeLine("    arena->page_size = page_size;")
+	c.writeLine("    NectoArenaPage* page = (NectoArenaPage*)malloc(sizeof(NectoArenaPage) + page_size);")
+	c.writeLine("    page->next = NULL;")
+	c.writeLine("    page->offset = 0;")
+	c.writeLine("    page->capacity = page_size;")
+	c.writeLine("    arena->current = page;")
+	c.writeLine("    return arena;")
+	c.writeLine("}")
+	c.writeLine("")
+	c.writeLine("static inline void* necto_arena_alloc(NectoArena* arena, size_t bytes) {")
+	c.writeLine("    if (!arena) return malloc(bytes);")
+	c.writeLine("    bytes = (bytes + 7) & ~7;")
+	c.writeLine("    if (arena->current->offset + bytes > arena->current->capacity) {")
+	c.writeLine("        size_t new_cap = arena->page_size;")
+	c.writeLine("        if (bytes > new_cap) new_cap = bytes;")
+	c.writeLine("        NectoArenaPage* next_page = (NectoArenaPage*)malloc(sizeof(NectoArenaPage) + new_cap);")
+	c.writeLine("        next_page->next = arena->current;")
+	c.writeLine("        next_page->offset = 0;")
+	c.writeLine("        next_page->capacity = new_cap;")
+	c.writeLine("        arena->current = next_page;")
+	c.writeLine("    }")
+	c.writeLine("    void* ptr = (void*)(arena->current->memory + arena->current->offset);")
+	c.writeLine("    arena->current->offset += bytes;")
+	c.writeLine("    return ptr;")
+	c.writeLine("}")
+	c.writeLine("")
+	c.writeLine("static inline void necto_arena_free_all(NectoArena* arena) {")
+	c.writeLine("    if (!arena) return;")
+	c.writeLine("    NectoArenaPage* p = arena->current;")
+	c.writeLine("    while (p != NULL) {")
+	c.writeLine("        NectoArenaPage* next = p->next;")
+	c.writeLine("        free(p);")
+	c.writeLine("        p = next;")
+	c.writeLine("    }")
+	c.writeLine("    free(arena);")
+	c.writeLine("}")
+	c.writeLine("")
 
 	// Первый проход: структуры
 	for _, stmt := range program.Statements {
@@ -124,10 +179,12 @@ func (c *Compiler) CompileToC(program *ast.Program) (string, error) {
 
 	if !hasExplicitMain {
 		c.writeLine("int main(int argc, char** argv) {")
+		c.writeLine("    g_necto_global_arena = necto_arena_create(64 * 1024);")
 		c.indent++
 		for _, s := range topLevelStmts {
 			c.compileStatement(s)
 		}
+		c.writeLine("necto_arena_free_all(g_necto_global_arena);")
 		c.writeLine("return 0;")
 		c.indent--
 		c.writeLine("}")
@@ -151,6 +208,7 @@ func (c *Compiler) generateFnSignature(fd *ast.FnDeclaration) string {
 func (c *Compiler) compileFn(fd *ast.FnDeclaration) error {
 	if fd.Name.Value == "main" {
 		c.writeLine("int main(int argc, char** argv) {")
+		c.writeLine("    g_necto_global_arena = necto_arena_create(64 * 1024);")
 	} else {
 		sig := c.generateFnSignature(fd)
 		c.writeLine(sig + " {")
@@ -162,6 +220,7 @@ func (c *Compiler) compileFn(fd *ast.FnDeclaration) error {
 	}
 
 	if fd.Name.Value == "main" {
+		c.writeLine("necto_arena_free_all(g_necto_global_arena);")
 		c.writeLine("return 0;")
 	}
 	c.indent--

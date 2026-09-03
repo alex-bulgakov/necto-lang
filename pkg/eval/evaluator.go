@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -63,6 +64,44 @@ var modules = map[string]*Module{
 						elems = append(elems, &String{Value: a})
 					}
 					return &Array{Elements: elems}
+				},
+			},
+		},
+	},
+	"path": {
+		Name: "path",
+		Methods: map[string]*Builtin{
+			"join": {
+				Fn: func(args ...Object) Object {
+					var parts []string
+					for _, a := range args {
+						parts = append(parts, a.Inspect())
+					}
+					return &String{Value: filepath.Join(parts...)}
+				},
+			},
+			"ext": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("path.ext() takes 1 argument (path)")
+					}
+					return &String{Value: filepath.Ext(args[0].Inspect())}
+				},
+			},
+			"base": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("path.base() takes 1 argument (path)")
+					}
+					return &String{Value: filepath.Base(args[0].Inspect())}
+				},
+			},
+			"dir": {
+				Fn: func(args ...Object) Object {
+					if len(args) != 1 {
+						return newError("path.dir() takes 1 argument (path)")
+					}
+					return &String{Value: filepath.Dir(args[0].Inspect())}
 				},
 			},
 		},

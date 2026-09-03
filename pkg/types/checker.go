@@ -560,6 +560,13 @@ func (c *Checker) checkExpression(expr ast.Expression) Type {
 				if e.Right.Value == "new" {
 					return &FunctionType{Params: []Type{Int}, ReturnType: Any}
 				}
+			case "path":
+				switch e.Right.Value {
+				case "join":
+					return &FunctionType{Params: []Type{Str}, ReturnType: Str}
+				case "ext", "base", "dir":
+					return &FunctionType{Params: []Type{Str}, ReturnType: Str}
+				}
 			}
 
 			// Статические методы структуры: StructName.new(...)
